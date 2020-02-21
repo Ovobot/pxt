@@ -768,7 +768,7 @@
   "call the function": "调用函数",
   "camera {0}": "相机 {0}",
   "change %1 by %2": "以 %2 为幅度更改 %1",
-  "change %{0} %property by %{1}": "以 %{1} 为幅度更改 %{0} 的 %property",
+  "change %{0} %property by %{1}": "%{0} 的 %property 增加 %{1}",
   "collapsed": "已折叠",
   "comparing two numbers": "比较两个数字",
   "conflict between core extensions {0} and {1}": "核心扩展 {0} 与 {1} 之间发生冲突",
