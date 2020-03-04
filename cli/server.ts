@@ -288,6 +288,8 @@ function handleApiAsync(req: http.IncomingMessage, res: http.ServerResponse, elt
         nodeutil.readResAsync(req)
             .then(buf => JSON.parse(buf.toString("utf8")))
 
+    console.log("recv cmd" + cmd);        
+
     if (cmd == "GET list")
         return returnDirAsync(innerPath, 3)
             .then<pxt.FsPkgs>(lst => {
@@ -344,6 +346,10 @@ function handleApiAsync(req: http.IncomingMessage, res: http.ServerResponse, elt
     else if (cmd == "GET config" && new RegExp(`${pxt.appTarget.id}\/targetconfig(\/v[0-9.]+)?$`).test(innerPath)) {
         // target config
         return readFileAsync("targetconfig.json").then(buf => JSON.parse(buf.toString("utf8")));
+    }else if( cmd== "GET clientconfig"){
+        //增加此接口，返回CDN地址
+        //http://192.168.1.142:3232 https://makecode.trafficmanager.cn
+        return readFileAsync("targetconfig.json").then((res) => {return {primaryCdnUrl: "https://makecode.trafficmanager.cn"}});
     }
     else throw throwError(400, `unknown command ${cmd.slice(0, 140)}`)
 }
@@ -1039,6 +1045,7 @@ export function serveAsync(options: ServeOptions) {
         }
 
         if (/\/-[-]*docs.*$/.test(pathname)) {
+            console.log("called docs.html");
             sendFile(path.join(publicDir, 'docs.html'));
             return
         }
@@ -1096,7 +1103,7 @@ export function serveAsync(options: ServeOptions) {
                 return;
             }
         }
-
+        //if test local don't load sim 
         if (/simulator\.html/.test(pathname)) {
             // Special handling for missing simulator: redirect to the live sim
             res.writeHead(302, { location: `https://trg-${pxt.appTarget.id}.userpxt.io/---simulator` });
@@ -1124,6 +1131,7 @@ export function serveAsync(options: ServeOptions) {
         }
 
         if (webFile) {
+            console.log("did find webFile");
             if (/\.html$/.test(webFile)) {
                 let html = expandHtml(fs.readFileSync(webFile, "utf8"), htmlParams)
                 sendHtml(html)
@@ -1131,6 +1139,7 @@ export function serveAsync(options: ServeOptions) {
                 sendFile(webFile)
             }
         } else {
+
             const m = /^\/(v\d+)(.*)/.exec(pathname);
             if (m) pathname = m[2];
             const lang = (opts["translate"] && ts.pxtc.Util.TRANSLATION_LOCALE)
@@ -1152,6 +1161,8 @@ export function serveAsync(options: ServeOptions) {
                     if (opts["translate"])
                         mdopts.pubinfo["incontexttranslations"] = "1";
                     const html = pxt.docs.renderMarkdown(mdopts)
+                    console.log("called webFile " + pathname);
+
                     sendHtml(html, U.startsWith(md, "# Not found") ? 404 : 200)
                 });
         }
