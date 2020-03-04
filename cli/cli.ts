@@ -2383,7 +2383,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         fileData
                     );
                     // patch any /static/... url to /docs/static/...
-                    const patchedMd = md.replace(/\"\/static\//g, `"/docs/static/`);
+                    const patchedMd = md.replace(/\"\/static\//g, `"/static/`);
                     nodeutil.writeFileSync(outputFile, patchedMd, { encoding: "utf8" });
 
                     html = pxt.docs.renderMarkdown({
