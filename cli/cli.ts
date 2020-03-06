@@ -916,11 +916,11 @@ function uploadCoreAsync(opts: UploadOptions) {
 
     if (opts.localDir) {
         let cfg: pxt.WebConfig = {
-            "relprefix": opts.localDir,
+            "relprefix": "/static/",
             "verprefix": "",
-            "workerjs": opts.localDir + "worker.js",
-            "monacoworkerjs": opts.localDir + "monacoworker.js",
-            "gifworkerjs": opts.localDir + "gifjs/gif.worker.js",
+            "workerjs": "/static/worker.js",
+            "monacoworkerjs": "/static/monacoworker.js",
+            "gifworkerjs": "/static/gifjs/gif.worker.js",
             "pxtVersion": pxtVersion(),
             "pxtRelId": "",
             "pxtCdnUrl": opts.localDir,
@@ -931,7 +931,7 @@ function uploadCoreAsync(opts: UploadOptions) {
             "targetRelId": "",
             "targetUrl": "",
             "targetId": opts.target,
-            "simUrl": opts.localDir + "simulator.html",
+            "simUrl": "https://trg-arcade.userpxt.io/---simulator",
             "partsUrl": opts.localDir + "siminstructions.html",
             "runUrl": opts.localDir + "run.html",
             "docsUrl": opts.localDir + "docs.html",
@@ -956,7 +956,7 @@ function uploadCoreAsync(opts: UploadOptions) {
                 `${opts.localDir}${path.join('./docs', logos[k])}`).join('\n') : ''
         }
         if (!opts.noAppCache) {
-            replacements["data-manifest=\"\""] = `manifest="${opts.localDir}release.manifest"`;
+            replacements["data-manifest=\"\""] = `manifest="/static/release.manifest"`;
         }
     }
 
@@ -2383,7 +2383,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         fileData
                     );
                     // patch any /static/... url to /docs/static/...
-                    const patchedMd = md.replace(/\"\/static\//g, `"/static/`);
+                    const patchedMd = md.replace(/\"\/static\//g, `"/static/docs/static/`);
                     nodeutil.writeFileSync(outputFile, patchedMd, { encoding: "utf8" });
 
                     html = pxt.docs.renderMarkdown({
@@ -4222,7 +4222,7 @@ export function staticpkgAsync(parsed: commandParser.ParsedCommand) {
 
 function internalStaticPkgAsync(builtPackaged: string, label: string, minify: boolean, noAppCache?: boolean) {
     const pref = path.resolve(builtPackaged);
-    const localDir = !label ? "./" : `${U.startsWith(label, ".") || U.startsWith(label, "/") ? "" : "/"}${label}${U.endsWith(label, "/") ? "" : "/"}`;
+    const localDir = !label ? "./" : `${U.startsWith(label, ".") || U.startsWith(label, "/") ? "" : ""}${label}${U.endsWith(label, "/") ? "" : "/"}`;
     return uploadCoreAsync({
         label: label || "main",
         pkgversion: "0.0.0",
