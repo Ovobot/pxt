@@ -1290,7 +1290,7 @@ namespace pxt.hex {
 
                 return getCdnUrlAsync()
                     .then(url => {
-                        hexurl = url + "/compile/" + extInfo.sha
+                        hexurl = "https://pxt.azureedge.net/" + "/compile/" + extInfo.sha
                         return U.httpGetTextAsync(hexurl + ".hex")
                     })
                     .then(r => r, e =>

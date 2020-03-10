@@ -933,8 +933,8 @@ function uploadCoreAsync(opts: UploadOptions) {
             "targetId": opts.target,
             "simUrl": "https://trg-arcade.userpxt.io/---simulator",
             "partsUrl": opts.localDir + "siminstructions.html",
-            "runUrl": opts.localDir + "run.html",
-            "docsUrl": opts.localDir + "docs.html",
+            "runUrl": "/static/run.html",
+            "docsUrl": "/static/docs.html",
             "isStatic": true,
         }
         replacements = {
@@ -1049,10 +1049,11 @@ function uploadCoreAsync(opts: UploadOptions) {
                     let trg: pxt.TargetBundle = JSON.parse(content)
                     if (opts.localDir) {
                         for (let e of trg.appTheme.docMenu)
-                            if (e.path[0] == "/") {
-                                e.path = opts.localDir + "docs" + e.path;
-                            }
-                        trg.appTheme.homeUrl = opts.localDir
+                            // if (e.path[0] == "/") {
+                            //     //opts.localDir +
+                            //     e.path =  "/docs" + e.path;
+                            // }
+                        trg.appTheme.homeUrl = 'https://arcade.ovobot.cn/'//opts.localDir
                         // patch icons in bundled packages
                         Object.keys(trg.bundledpkgs).forEach(pkgid => {
                             const res = trg.bundledpkgs[pkgid];

@@ -118,7 +118,7 @@ namespace pxt.github {
     }
 
     function ghProxyJsonAsync(path: string) {
-        return Cloud.apiRequestWithCdnAsync({ url: "gh/" + path }).then(r => r.json)
+        return Cloud.apiRequestWithCdnAsync({ url: "gh/" + path ,forceLiveEndpoint: true}).then(r => r.json)
     }
 
     export class MemoryGithubDb implements IGithubDb {

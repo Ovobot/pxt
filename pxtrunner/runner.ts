@@ -414,10 +414,11 @@ namespace pxt.runner {
                 break;
             case "popout":
                 let mp = /((\/v[0-9+])\/)?[^\/]*#(doc|md):([^&?:]+)/i.exec(window.location.href);
+                //console.log("window href = " + window.location.href);
                 if (mp) {
                     const docsUrl = pxt.webConfig.docsUrl || '/--docs';
                     let verPrefix = mp[2] || '';
-                    let url = mp[3] == "doc" ? (pxt.webConfig.isStatic ? `/docs${mp[4]}.html` : `${mp[4]}`) : `${docsUrl}?md=${mp[4]}`;
+                    let url = mp[3] == "doc" ? (false ? `/docs${mp[4]}.html` : `${mp[4]}`) : `${docsUrl}?md=${mp[4]}`;
                     // notify parent iframe that we have completed the popout
                     if (window.parent)
                         window.parent.postMessage(<pxsim.SimulatorOpenDocMessage>{
