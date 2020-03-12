@@ -124,7 +124,7 @@ function shareScript(md, done) {
 
     const title = /^#\s([\s\w]*)$/m.exec(md);
     const name = title ? title[1] : "Tutorial";
-    request("https://makecode.com/api/scripts", {
+    request("https://arcade.ovobot.cn/api/scripts", {
         name: name,
         target: selectedTarget.id,
         description: "Made with ❤️ in Microsoft MakeCode Arcade.",
