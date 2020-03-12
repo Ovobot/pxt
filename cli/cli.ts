@@ -2401,7 +2401,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                 }
 
                 html = html.replace(/(<a[^<>]*)\shref="(\/[^<>"]*)"/g, (f, beg, url) => {
-                    return beg + ` href="${webpath}docs${url}.html"`
+                    return beg + ` href="/static/docs${url}.html"`
                 });
                 buf = Buffer.from(html, "utf8");
             }
