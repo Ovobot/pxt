@@ -5,6 +5,7 @@ namespace pxt.Cloud {
     // hit /api/ to stay on same domain and avoid CORS
     //export let apiRoot = pxt.BrowserUtils.isLocalHost() || Util.isNodeJS ? "https://www.makecode.com/api/" : "/api/";
     export let apiRoot = "/api/";
+    export let gitApiRoot = "https://www.makecode.com/api/";
     export let accessToken = "";
     export let localToken = "";
     let _isOnline = true;
@@ -54,6 +55,31 @@ namespace pxt.Cloud {
     export function apiRequestWithCdnAsync(options: Util.HttpRequestOptions) {
         if (!useCdnApi())
             return privateRequestAsync(options)
+        options.url = cdnApiUrl(options.url)
+        return Util.requestAsync(options)
+            .catch(e => handleNetworkError(options, e))
+    }
+
+    export function privateGitRequestAsync(options: Util.HttpRequestOptions) {
+        options.url = pxt.webConfig && pxt.webConfig.isStatic && !options.forceLiveEndpoint ? pxt.webConfig.relprefix + options.url : gitApiRoot + options.url;
+        options.allowGzipPost = true
+        if (!Cloud.isOnline()) {
+            return offlineError(options.url);
+        }
+        if (!options.headers) options.headers = {}
+        if (pxt.BrowserUtils.isLocalHost()) {
+            if (Cloud.localToken)
+                options.headers["Authorization"] = Cloud.localToken;
+        } else if (accessToken) {
+            options.headers["x-td-access-token"] = accessToken
+        }
+        return Util.requestAsync(options)
+            .catch(e => handleNetworkError(options, e))
+    }
+
+    export function gitApiRequestWithCdnAsync(options: Util.HttpRequestOptions) {
+        if (!useCdnApi())
+            return privateGitRequestAsync(options)
         options.url = cdnApiUrl(options.url)
         return Util.requestAsync(options)
             .catch(e => handleNetworkError(options, e))

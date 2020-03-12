@@ -118,7 +118,7 @@ namespace pxt.github {
     }
 
     function ghProxyJsonAsync(path: string) {
-        return Cloud.apiRequestWithCdnAsync({ url: "gh/" + path ,forceLiveEndpoint: true}).then(r => r.json)
+        return Cloud.gitApiRequestWithCdnAsync({ url: "gh/" + path ,forceLiveEndpoint: true}).then(r => r.json)
     }
 
     export class MemoryGithubDb implements IGithubDb {
@@ -432,7 +432,7 @@ namespace pxt.github {
         const fetch = !useProxy() ?
             ghGetJsonAsync("https://api.github.com/repos/" + repopath + "/git/refs/" + namespace + "/?per_page=100") :
             // no CDN caching here
-            U.httpGetJsonAsync(`${pxt.Cloud.apiRoot}gh/${repopath}/refs`)
+            U.httpGetJsonAsync(`${pxt.Cloud.gitApiRoot}gh/${repopath}/refs`)
                 .then(r => {
                     let res = Object.keys(r.refs)
                         .filter(k => U.startsWith(k, "refs/" + namespace + "/"))
@@ -696,7 +696,7 @@ namespace pxt.github {
                 .then(rs => rs.filter(r => r && r.status != GitRepoStatus.Banned)); // allow deep links to github repos
 
         let fetch = () => useProxy()
-            ? U.httpGetJsonAsync(`${pxt.Cloud.apiRoot}ghsearch/${appTarget.id}/${appTarget.platformid || appTarget.id}?q=`
+            ? U.httpGetJsonAsync(`${pxt.Cloud.gitApiRoot}ghsearch/${appTarget.id}/${appTarget.platformid || appTarget.id}?q=`
                 + encodeURIComponent(query))
             : ghGetJsonAsync("https://api.github.com/search/repositories?q="
                 + encodeURIComponent(query + ` in:name,description,readme "for PXT/${appTarget.platformid || appTarget.id}"`))
