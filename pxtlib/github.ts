@@ -590,7 +590,10 @@ namespace pxt.github {
     }
 
     export function mkRepoIconUrl(repo: ParsedRepo): string {
-        return Cloud.cdnApiUrl(`gh/${repo.fullName}/icon`)
+        let repoUrl = `gh/${repo.fullName}/icon`
+        repoUrl = repoUrl.replace(/^\//, '');
+        return Cloud.gitApiRoot + repoUrl
+        //return Cloud.cdnApiUrl(`gh/${repo.fullName}/icon`)
     }
 
     function mkRepo(r: Repo, config: pxt.PackagesConfig, tag?: string): GitRepo {
