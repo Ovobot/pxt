@@ -60,6 +60,23 @@ namespace pxt.Cloud {
             .catch(e => handleNetworkError(options, e))
     }
 
+    export function privateMdRequestAsync(options: Util.HttpRequestOptions) {
+        options.url = options.url;
+        options.allowGzipPost = true
+        if (!Cloud.isOnline()) {
+            return offlineError(options.url);
+        }
+        if (!options.headers) options.headers = {}
+        if (pxt.BrowserUtils.isLocalHost()) {
+            if (Cloud.localToken)
+                options.headers["Authorization"] = Cloud.localToken;
+        } else if (accessToken) {
+            options.headers["x-td-access-token"] = accessToken
+        }
+        return Util.requestAsync(options)
+            .catch(e => handleNetworkError(options, e))
+    }
+
     export function privateGitRequestAsync(options: Util.HttpRequestOptions) {
         options.url = pxt.webConfig && pxt.webConfig.isStatic && !options.forceLiveEndpoint ? pxt.webConfig.relprefix + options.url : gitApiRoot + options.url;
         options.allowGzipPost = true
@@ -197,7 +214,7 @@ namespace pxt.Cloud {
             });
         else {
             const headers: pxt.Map<string> = etag && !useCdnApi() ? { "If-None-Match": etag } : undefined;
-            return apiRequestWithCdnAsync({ url, method: "GET", headers })
+            return privateMdRequestAsync({ url, method: "GET", headers })
                 .then(resp => { return { md: resp.text, etag: resp.headers["etag"] }; });
         }
     }
