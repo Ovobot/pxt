@@ -199,7 +199,7 @@ namespace pxt.Cloud {
                 url = `${url}.md`;
             }
         } else {
-            url = `https://www.ovobot.cn/ajaxapp/md/${pxt.appTarget.id}/${docid.replace(/^\//, "")}?targetVersion=${encodeURIComponent(targetVersion)}`;
+            url = `https://arcade.ovobot.cn/api/md/${pxt.appTarget.id}/${docid.replace(/^\//, "")}?targetVersion=${encodeURIComponent(targetVersion)}`;
         }
         if (!packaged && locale != "en") {
             url += `&lang=${encodeURIComponent(locale)}`
