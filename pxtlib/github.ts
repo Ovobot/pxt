@@ -118,7 +118,8 @@ namespace pxt.github {
     }
 
     function ghProxyJsonAsync(path: string) {
-        return Cloud.apiRequestWithCdnAsync({ url: "gh/" + path }).then(r => r.json)
+        //return Cloud.apiRequestWithCdnAsync({ url: "gh/" + path }).then(r => r.json)
+        return Cloud.gitApiRequestWithCdnAsync({ url: "gh/" + path }).then(r => r.json)
     }
 
     export class MemoryGithubDb implements IGithubDb {
@@ -432,7 +433,7 @@ namespace pxt.github {
         const fetch = !useProxy() ?
             ghGetJsonAsync("https://api.github.com/repos/" + repopath + "/git/refs/" + namespace + "/?per_page=100") :
             // no CDN caching here
-            U.httpGetJsonAsync(`${pxt.Cloud.apiRoot}gh/${repopath}/refs`)
+            U.httpGetJsonAsync(`${pxt.Cloud.gitApiRoot}gh/${repopath}/refs`)
                 .then(r => {
                     let res = Object.keys(r.refs)
                         .filter(k => U.startsWith(k, "refs/" + namespace + "/"))
@@ -590,7 +591,10 @@ namespace pxt.github {
     }
 
     export function mkRepoIconUrl(repo: ParsedRepo): string {
-        return Cloud.cdnApiUrl(`gh/${repo.fullName}/icon`)
+        // return Cloud.cdnApiUrl(`gh/${repo.fullName}/icon`)
+        let repoUrl = `gh/${repo.fullName}/icon`
+        repoUrl = repoUrl.replace(/^\//, '');
+        return Cloud.gitApiRoot + repoUrl;
     }
 
     function mkRepo(r: Repo, config: pxt.PackagesConfig, tag?: string): GitRepo {

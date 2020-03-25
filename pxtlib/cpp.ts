@@ -1268,11 +1268,12 @@ namespace pxt.hex {
     function getCdnUrlAsync() {
         if (cdnUrlPromise) return cdnUrlPromise;
         else {
-            let curr = getOnlineCdnUrl()
-            if (curr) return (cdnUrlPromise = Promise.resolve(curr))
-            const forceLive = pxt.webConfig && pxt.webConfig.isStatic;
-            return (cdnUrlPromise = Cloud.privateGetAsync("clientconfig", forceLive)
-                .then(r => r.primaryCdnUrl));
+            // let curr = getOnlineCdnUrl()
+            // if (curr) return (cdnUrlPromise = Promise.resolve(curr))
+            // const forceLive = pxt.webConfig && pxt.webConfig.isStatic;
+            // return (cdnUrlPromise = Cloud.privateGetAsync("clientconfig", forceLive)
+            //     .then(r => r.primaryCdnUrl));
+            return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
         }
     }
 

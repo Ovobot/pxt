@@ -33,6 +33,7 @@ const rimraf: (f: string, opts: any, cb: (err: any, res: any) => void) => void =
 let forceCloudBuild = process.env["KS_FORCE_CLOUD"] !== "no";
 let forceLocalBuild = !!process.env["PXT_FORCE_LOCAL"];
 let forceBuild = false; // don't use cache
+let uplReqs_proj: Map<String> = {}
 
 Error.stackTraceLimit = 100;
 
@@ -693,6 +694,143 @@ function uploadFileName(p: string) {
         .replace(/^.*(built\/web\/|\w+\/public\/|built\/)/, "")
 }
 
+function privateSaveAsync(path: string, data: any, forceLiveEndpoint: boolean = false) {
+    console.log("post data ",data);
+    return Promise.resolve();
+    //return privateRequestAsync({ url: path, data: data || {}, forceLiveEndpoint }).then(resp => resp.json)
+}
+
+function gitSaveLocalAsync(opts: UploadOptions, uplReqs: Map<BlobReq>){
+    let replFiles = [
+        "index.html",
+        "embed.js",
+        "run.html",
+        "docs.html",
+        "siminstructions.html",
+        "codeembed.html",
+        "release.manifest",
+        "worker.js",
+        "monacoworker.js",
+        "simulator.html",
+        "sim.manifest",
+        "sim.webmanifest",
+    ]
+    let reqs = U.unique(U.values(uplReqs), r => r.hash)
+    console.log("Asking for", reqs.length, "hashes")
+    nodeutil.mkdirP("tmp")
+    let trgPath = "tmp/releases"
+
+    const dst = path.resolve(path.join(opts.builtPackaged, opts.localDir))
+
+
+    const validatedDirs: Map<boolean> = {}
+
+    return Promise.resolve()
+        .then(() => {
+            for (let u of U.values(uplReqs)) {
+                let fpath = path.join(trgPath, u.filename)
+                nodeutil.mkdirP(path.dirname(fpath))
+                let outputFile = path.join(dst, "blob/"+ u.hash, u.filename);
+                uplReqs_proj[u.filename] = u.hash;
+                const outputDir = path.dirname(outputFile);
+                if (!validatedDirs[outputDir]) {
+                    nodeutil.mkdirP(outputDir);
+                    validatedDirs[outputDir] = true;
+                }
+                fs.writeFileSync(outputFile, u.content, { encoding: u.encoding })
+                if (replFiles.indexOf(u.filename) >= 0) {
+                    console.log("replfile = ",u.filename);
+                    //console.log("should repl = ",u.content.match(/@blobCdnUrl@.*?js/));
+                    //let regexp = new RegExp("/@blobCdnUrl@.*?\"/", "g");
+                    let reg = /@blobCdnUrl@.*?(?=\")/g;
+                    let reg_commit  = /@commitCdnUrl@/g;
+                    let match = u.content.match(reg);
+                    if(match){
+                        // console.log("match count" , match.length);
+                        for (let replfp of match){
+                            let findCDNfp = replfp.split("@").pop();
+                            for (let uu of U.values(uplReqs)){
+                                if(findCDNfp == uu.filename){
+                                    console.log("found file" ,findCDNfp , "hash =" , uu.hash);
+                                    u.content = u.content.replace(replfp,"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uu.hash+"/"+findCDNfp)
+                                }
+                            }
+                            //console.log("should find cdn file" ,findCDNfp);
+                        }
+                    }
+                    u.content = U.replaceAll(u.content, "@commitCdnUrl@","https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/");
+                    // let match_commit = u.content.match(reg_commit);
+                    // if(match_commit){
+                    //     // console.log("match count" , match.length);
+                    //     for (let replfp of match_commit){
+                    //         let findCDNfp = replfp.split("@").pop();
+                    //         for (let uu of U.values(uplReqs)){
+                    //             if(findCDNfp == uu.filename){
+                    //                 console.log("found commit file" ,findCDNfp , "hash =" , uu.hash);
+                    //                 u.content = u.content.replace(replfp,"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/"+findCDNfp)
+                    //             }
+                    //         }
+                    //         //console.log("should find cdn file" ,findCDNfp);
+                    //     }
+                    // }
+                }
+                fs.writeFileSync(fpath, u.content, { encoding: u.encoding })
+            }
+            let commitfolder = path.join(dst, "c5177f6b23685043918d43feeabb6d8ddb01120f");
+
+            nodeutil.mkdirP(commitfolder)
+            nodeutil.cpR(trgPath, commitfolder);
+
+            // let missing = U.toDictionary(reqs.map(r => r.hash) as string[], s => s)
+            // let missingReqs = reqs.filter(r => !!U.lookup(missing, r.hash))
+            // let size = 0
+            // for (let r of missingReqs) size += r.size
+            // console.log("files missing: ", missingReqs.length, size, "bytes")
+            // return Promise.map(missingReqs,
+            //     r => privateSaveAsync("upload/blob", r)
+            //         .then(() => {
+            //             console.log(r.filename + ": OK," + r.size + " " + r.hash)
+            //         }))
+        })
+        // .then(() => {
+        //     let roottree: Map<GitEntry> = {}
+        //     let get = (tree: GitTree, path: string): GitEntry => {
+        //         let subt = U.lookup(tree, path)
+        //         if (!subt)
+        //             subt = tree[path] = {}
+        //         return subt
+        //     }
+        //     let lookup = (tree: GitTree, path: string): GitEntry => {
+        //         let m = /^([^\/]+)\/(.*)/.exec(path)
+        //         if (m) {
+        //             let subt = get(tree, m[1])
+        //             U.assert(!subt.hash)
+        //             if (!subt.subtree) subt.subtree = {}
+        //             return lookup(subt.subtree, m[2])
+        //         } else {
+        //             return get(tree, path)
+        //         }
+        //     }
+        //     for (let fn of Object.keys(uplReqs)) {
+        //         let e = lookup(roottree, fn)
+        //         e.hash = uplReqs[fn].hash
+        //     }
+        //     const info = ciBuildInfo()
+        //     let data: CommitInfo = {
+        //         message: "Upload from " + info.commitUrl,
+        //         parents: [],
+        //         target: pxt.appTarget.id,
+        //         tree: roottree,
+        //     }
+        //     console.log("Creating commit...")
+        //     return Cloud.privatePostAsync("upload/commit", data)
+        // })
+        // .then(res => {
+        //     console.log("Commit:", res)
+        //     return uploadToGitRepoAsync(opts, uplReqs)
+        // })
+}
+
 function gitUploadAsync(opts: UploadOptions, uplReqs: Map<BlobReq>) {
     let reqs = U.unique(U.values(uplReqs), r => r.hash)
     console.log("Asking for", reqs.length, "hashes")
@@ -862,6 +1000,13 @@ function uploadArtFile(fn: string): string {
     return "@cdnUrl@/blob/" + gitHash(fs.readFileSync("docs" + fn)) + "" + fn;
 }
 
+function uploadDocsArtFile(fn: string): string {
+    if (!fn || /^(https?|data):/.test(fn)) return fn; // nothing to do
+
+    fn = fn.replace(/^\.?\/*/, "/")
+    return "@cdnUrl@/blob/" + gitHash(fs.readFileSync(fn)) + "" + fn;
+}
+
 function gitHash(buf: Buffer) {
     let hash = crypto.createHash("sha1")
     hash.update(Buffer.from("blob " + buf.length + "\u0000", "utf8"))
@@ -884,10 +1029,14 @@ function uploadCoreAsync(opts: UploadOptions) {
     }
 
     let logos = (targetConfig.appTheme as any as Map<string>);
-    let targetImages = Object.keys(logos)
-        .filter(k => /(logo|hero)$/i.test(k) && /^\.\//.test(logos[k]));
-    let targetImagesHashed = pxt.Util.unique(targetImages.map(k => uploadArtFile(logos[k])), url => url);
+    
 
+    console.log("logos = ",Object.keys(logos));
+
+    let targetImages = Object.keys(logos)
+        .filter(k => /(logo|hero)$/i.test(k) && /^\.\//.test(logos[k]));// 
+    let targetImagesHashed = pxt.Util.unique(targetImages.map(k => uploadArtFile(logos[k])), url => url);
+    console.log("targetimage hash",targetImagesHashed," image =" , targetImages);
     let targetEditorJs = "";
     if (pxt.appTarget.appTheme && pxt.appTarget.appTheme.extendEditor)
         targetEditorJs = "@commitCdnUrl@editor.js";
@@ -895,18 +1044,41 @@ function uploadCoreAsync(opts: UploadOptions) {
     if (pxt.appTarget.appTheme && pxt.appTarget.appTheme.extendFieldEditors)
         targetFieldEditorsJs = "@commitCdnUrl@fieldeditors.js";
 
+    let cfg: pxt.WebConfig = {
+        "relprefix": "/---",
+        "verprefix": "",
+        "workerjs": "/---worker",//"/worker.js"
+        "monacoworkerjs": "/---monacoworker",//"/monacoworker.js"
+        "gifworkerjs": "/---gifworker",//"gifjs/gif.worker.js"
+        "pxtVersion": pxtVersion(),
+        "pxtRelId": "c5177f6b23685043918d43feeabb6d8ddb01120f",
+        "pxtCdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
+        "commitCdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
+        "blobCdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
+        "cdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com",
+        "targetVersion": opts.pkgversion,
+        "targetRelId": "c5177f6b23685043918d43feeabb6d8ddb01120f",
+        "targetUrl": "https://arcade.ovobot.cn",
+        "targetId": opts.target,
+        "simUrl": "https://trg-arcade.userpxt.io/---simulator",
+        "partsUrl": "https://trg-arcade.userpxt.io/---siminstructions",
+        "runUrl": "/---run",//"/run.html"
+        "docsUrl": "/---docs"//"/docs.html"
+        // "isStatic": true
+    }
+
     let replacements: Map<string> = {
         "/sim/simulator.html": "@simUrl@",
         "/sim/siminstructions.html": "@partsUrl@",
         "/sim/sim.webmanifest": "@relprefix@webmanifest",
-        "/embed.js": "@targetUrl@@relprefix@embed",
+        "/embed.js": "/---embed",//"@targetUrl@@relprefix@embed"
         "/cdn/": "@commitCdnUrl@",
         "/doccdn/": "@commitCdnUrl@",
         "/sim/": "@commitCdnUrl@",
         "/blb/": "@blobCdnUrl@",
         "@timestamp@": "",
         "data-manifest=\"\"": "@manifest@",
-        "var pxtConfig = null": "var pxtConfig = @cfg@",
+        "var pxtConfig = null": "var pxtConfig = " + JSON.stringify(cfg, null, 4),
         "@defaultLocaleStrings@": defaultLocale ? "@commitCdnUrl@" + "locales/" + defaultLocale + "/strings.json" : "",
         "@cachedHexFiles@": hexFiles.length ? hexFiles.join("\n") : "",
         "@targetEditorJs@": targetEditorJs,
@@ -926,16 +1098,15 @@ function uploadCoreAsync(opts: UploadOptions) {
             "pxtCdnUrl": opts.localDir,
             "commitCdnUrl": opts.localDir,
             "blobCdnUrl": opts.localDir,
-            "cdnUrl": opts.localDir,
+            "cdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com",
             "targetVersion": opts.pkgversion,
             "targetRelId": "",
-            "targetUrl": "",
+            "targetUrl": "https://arcade.ovobot.cn",
             "targetId": opts.target,
-            "simUrl": opts.localDir + "simulator.html",
-            "partsUrl": opts.localDir + "siminstructions.html",
+            "simUrl": "https://trg-arcade.userpxt.io/---simulator",
+            "partsUrl": "https://trg-arcade.userpxt.io/---siminstructions",
             "runUrl": opts.localDir + "run.html",
-            "docsUrl": opts.localDir + "docs.html",
-            "isStatic": true,
+            "docsUrl": opts.localDir + "docs.html"
         }
         replacements = {
             "/embed.js": opts.localDir + "embed.js",
@@ -975,7 +1146,7 @@ function uploadCoreAsync(opts: UploadOptions) {
         "sim.webmanifest",
     ]
 
-    nodeutil.mkdirP("built/uploadrepl")
+    //nodeutil.mkdirP("built/uploadrepl")
 
     let uplReqs: Map<BlobReq> = {}
 
@@ -1041,7 +1212,7 @@ function uploadCoreAsync(opts: UploadOptions) {
                         data = Buffer.from(content, "utf8")
                     } else {
                         // save it for developer inspection
-                        fs.writeFileSync("built/uploadrepl/" + fileName, content)
+                        //fs.writeFileSync("built/uploadrepl/" + fileName, content)
                     }
                 } else if (fileName == "target.json" || fileName == "target.js") {
                     let isJs = fileName == "target.js"
@@ -1132,7 +1303,7 @@ function uploadCoreAsync(opts: UploadOptions) {
         .then(() =>
             opts.githubOnly
                 ? uploadToGitRepoAsync(opts, uplReqs)
-                : gitUploadAsync(opts, uplReqs))
+                : gitSaveLocalAsync(opts, uplReqs))
 }
 
 function readLocalPxTarget() {
@@ -1634,7 +1805,10 @@ function saveThemeJson(cfg: pxt.TargetBundle, localDir?: boolean, packaged?: boo
         Object.keys(logos)
             .filter(k => /(logo|hero)$/i.test(k) && /^\.\//.test(logos[k]))
             .forEach(k => {
-                logos[k] = path.join('./docs', logos[k]).replace(/\\/g, "/");
+                let hash = uploadArtFile(logos[k]);
+                logos[k] = hash.replace("@cdnUrl@",'https://pxt-arcade.oss-cn-shanghai.aliyuncs.com');
+                console.log("save logo|hero = " , logos[k]);
+                //logos[k] = path.join('./docs', logos[k]).replace(/\\/g, "/");
             })
     } else if (!localDir) {
         Object.keys(logos)
@@ -2335,6 +2509,7 @@ function buildCommonSimAsync() {
     }
 }
 
+
 function renderDocs(builtPackaged: string, localDir: string) {
     const dst = path.resolve(path.join(builtPackaged, localDir))
 
@@ -2345,10 +2520,11 @@ function renderDocs(builtPackaged: string, localDir: string) {
     const webpath = localDir
     let docsTemplate = server.expandDocFileTemplate("docs.html")
     docsTemplate = U.replaceAll(docsTemplate, "/cdn/", webpath)
-    docsTemplate = U.replaceAll(docsTemplate, "/doccdn/", webpath)
-    docsTemplate = U.replaceAll(docsTemplate, "/docfiles/", webpath + "docfiles/")
-    docsTemplate = U.replaceAll(docsTemplate, "/--embed", webpath + "embed.js")
+    //docsTemplate = U.replaceAll(docsTemplate, "/doccdn/", webpath)
+    docsTemplate = U.replaceAll(docsTemplate, "/docfiles/", webpath + "")
 
+    docsTemplate = U.replaceAll(docsTemplate, "/--embed", webpath + "/---embed")
+    
     const validatedDirs: Map<boolean> = {}
 
     const docFolders = ["node_modules/pxt-core/common-docs"];
@@ -2360,11 +2536,78 @@ function renderDocs(builtPackaged: string, localDir: string) {
     docFolders.push(...nodeutil.getBundledPackagesDocs());
     docFolders.push("docs");
 
+    let docs_artfiles = nodeutil.allFiles("docs/static");
+    let uplReqs: Map<String> = {}
+
+    for(const docFolder of docFolders){
+        for (const f of nodeutil.allFiles(docFolder, 8)){
+            let buf = fs.readFileSync(f);
+            if (/\.(md|html)$/.test(f) == false){
+                let hash_art = gitHash(buf);
+                let hash_key = f.slice(4);
+                uplReqs[hash_key] = hash_art;
+                //console.log("docs static art hash = " , hash_art , " fp =" , hash_key);
+                const pathUnderDocs = f.slice(docFolder.length + 1);
+                let outputFile = path.join(dst, "blob/"+ hash_art, pathUnderDocs);
+    
+                const outputDir = path.dirname(outputFile);
+                if (!validatedDirs[outputDir]) {
+                    nodeutil.mkdirP(outputDir);
+                    validatedDirs[outputDir] = true;
+                }
+                nodeutil.writeFileSync(outputFile, buf)
+            }
+
+        }
+    }
+
+    const docfilesFolders = ["node_modules/pxt-core/docfiles"];
+
+
+    for(const docfilesFolder of docfilesFolders){
+        for (const f of nodeutil.allFiles(docfilesFolder, 8)){
+            let buf = fs.readFileSync(f);
+            if (/\.(md|html)$/.test(f) == false){
+                let hash_art = gitHash(buf);
+                const pathUnderDocs = f.slice(docfilesFolder.length + 1);
+                uplReqs[pathUnderDocs] = hash_art;
+                let outputFile = path.join(dst, "blob/"+ hash_art, pathUnderDocs);
+                console.log("docfile static art hash = " , hash_art , " fp =" , pathUnderDocs);
+
+                const outputDir = path.dirname(outputFile);
+                if (!validatedDirs[outputDir]) {
+                    nodeutil.mkdirP(outputDir);
+                    validatedDirs[outputDir] = true;
+                }
+                nodeutil.writeFileSync(outputFile, buf)
+            }
+
+        }
+    }
+
+    docsTemplate = docsTemplate.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
+        //console.log("find doccdn url = ",url);    
+        if(uplReqs_proj[url]){
+            let cdnurl = "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
+            return `${cdnurl}"`
+        } else if(uplReqs[url]){
+            let cdnurl = "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
+            return `${cdnurl}"`
+        } else {
+            let cdnurl = url;
+            return `${cdnurl}"`
+        }
+    });
+
+    const versions = pxt.appTarget.versions || ({ target: "", pxt: "" } as pxt.TargetVersions);
+
+
     for (const docFolder of docFolders) {
         for (const f of nodeutil.allFiles(docFolder, 8)) {
-            pxt.log(`rendering ${f}`)
+            //pxt.log(`rendering ${f}`)
             const pathUnderDocs = f.slice(docFolder.length + 1);
-            let outputFile = path.join(dst, "docs", pathUnderDocs);
+
+            let outputFile = path.join(dst, "en/docs",versions.target, pathUnderDocs);
 
             const outputDir = path.dirname(outputFile);
             if (!validatedDirs[outputDir]) {
@@ -2376,14 +2619,32 @@ function renderDocs(builtPackaged: string, localDir: string) {
             if (/\.(md|html)$/.test(f)) {
                 const fileData = buf.toString("utf8");
                 let html = "";
+                
                 if (U.endsWith(f, ".md")) {
-                    const md = nodeutil.resolveMd(
+                    
+                    let md = nodeutil.resolveMd(
                         ".",
                         pathUnderDocs.slice(0, -3),
                         fileData
                     );
                     // patch any /static/... url to /docs/static/...
-                    const patchedMd = md.replace(/\"\/static\//g, `"/docs/static/`);
+                    //@blobCdnUrl@/path
+                    let reg = /\"\/static\/.*?(?=\")/g;
+                    let match = md.match(reg);
+                    if(match){
+                        // console.log("match count" , match.length);
+                        for (let replfp of match){
+                            let findCDNfp = replfp;
+                            let hashKey = replfp.slice(1);
+                            md = md.replace(replfp,"\"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
+                            //console.log("should find cdn file" ,findCDNfp);
+                        }
+                    }
+                    md = md.replace(/(!\[.*?\]\()(.+?)(\))/g, function(whole, pre, src, end) {
+                        return pre + "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[src] + src + end;
+                    });
+                    let patchedMd = md;
+                    //const patchedMd = md.replace(/\"\/static\//g, `docs/static/`);
                     nodeutil.writeFileSync(outputFile, patchedMd, { encoding: "utf8" });
 
                     html = pxt.docs.renderMarkdown({
@@ -2392,23 +2653,146 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         theme: pxt.appTarget.appTheme,
                         filepath: path.join("docs", pathUnderDocs),
                     });
-
+                    
                     // replace .md with .html for rendered page drop
                     outputFile = outputFile.slice(0, -3) + ".html";
                 } else {
                     html = server.expandHtml(fileData);
                 }
 
-                html = html.replace(/(<a[^<>]*)\shref="(\/[^<>"]*)"/g, (f, beg, url) => {
-                    return beg + ` href="${webpath}docs${url}.html"`
-                });
-                buf = Buffer.from(html, "utf8");
-            }
 
+
+                html = html.replace(/href="(.*?)"/g, (f,  url) => {
+                    //console.log("docsTemplate", docsTemplate);
+                    url = U.replaceAll(url, "/cdn/", webpath)
+                    //url = U.replaceAll(url, "/doccdn/", webpath)
+                    
+                    url = U.replaceAll(url, "/docfiles/", webpath + "")
+
+                    // console.log("did find link href", url);
+                    // console.log("href hash ", uplReqs_proj[url]);
+
+                    if(uplReqs_proj[url]){
+                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        return ` href="${cdnurl}"`
+                    } else if(uplReqs[url]){
+                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        return ` href="${cdnurl}"`
+                    } else {
+                        let cdnurl = url;
+                        return ` href="${cdnurl}"`
+                    }
+                });
+                html = html.replace(/src="(.*?)"/g, (f,  url) => {
+                    //console.log("docsTemplate", docsTemplate);
+                    url = U.replaceAll(url, "/cdn/", webpath)
+                    url = U.replaceAll(url, "/docfiles/", webpath + "")
+
+                    // console.log("did find link href", url);
+                    // console.log("href hash ", uplReqs_proj[url]);
+
+                    if(uplReqs_proj[url]){
+                        
+                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        //"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
+                        return ` src="${cdnurl}"`
+                    } else if(uplReqs[url]){
+                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        //"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
+                        return ` src="${cdnurl}"`
+                    } else {
+                        let cdnurl = url;
+                        return ` src="${cdnurl}"`
+                    }
+                });
+
+                html = html.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
+                    if(uplReqs_proj[url]){
+                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        return `${cdnurl}"`
+                    } else if(uplReqs[url]){
+                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        return `${cdnurl}"`
+                    } else {
+                        let cdnurl = url;
+                        return `${cdnurl}"`
+                    }
+                });
+
+                buf = Buffer.from(html, "utf8");
+            } 
+            
             nodeutil.writeFileSync(outputFile, buf)
         }
-        pxt.log(`All docs written from ${docFolder}.`);
+        //pxt.log(`All docs written from ${docFolder}.`);
     }
+    const zh_docFolders = ["zh/docs"];
+    for (const docFolder of zh_docFolders) {
+        for (const f of nodeutil.allFiles(docFolder, 8)) {
+            //pxt.log(`rendering ${f}`)
+            const pathUnderDocs = f.slice(docFolder.length + 1);
+            let outputFile_zhcn = path.join(dst, "zh-CN/docs",versions.target, pathUnderDocs);
+
+            const outputDir = path.dirname(outputFile_zhcn);
+            if (!validatedDirs[outputDir]) {
+                nodeutil.mkdirP(outputDir);
+                validatedDirs[outputDir] = true;
+            }
+
+            let buf = fs.readFileSync(f);
+            if (/\.(md)$/.test(f)) {
+                const fileData = buf.toString("utf8");
+                
+                if (U.endsWith(f, ".md")) {
+                    
+                    let md = nodeutil.resolveMd(
+                        ".",
+                        pathUnderDocs.slice(0, -3),
+                        fileData
+                    );
+                    // patch any /static/... url to /docs/static/...
+                    //@blobCdnUrl@/path
+                    let reg = /\"\/static\/.*?(?=\")/g;
+                    let match = md.match(reg);
+                    if(match){
+                        // console.log("match count" , match.length);
+                        for (let replfp of match){
+                            let findCDNfp = replfp;
+                            let hashKey = replfp.slice(1);
+                            md = md.replace(replfp,"\"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
+                            //console.log("should find cdn file" ,findCDNfp);
+                        }
+                    }
+                    md = md.replace(/(!\[.*?\]\()(.+?)(\))/g, function(whole, pre, src, end) {
+                        return pre + "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[src] + src + end;
+                    });
+                    let patchedMd = md;
+                    //const patchedMd = md.replace(/\"\/static\//g, `docs/static/`);
+                    nodeutil.writeFileSync(outputFile_zhcn, patchedMd, { encoding: "utf8" });
+                    
+                } 
+            } 
+
+            //nodeutil.writeFileSync(outputFile_zhcn, buf)
+        }
+        //pxt.log(`All docs written from ${docFolder}.`);
+    }
+    console.log("uplReqs",uplReqs);
+    console.log("uplReqs_proj",uplReqs_proj);
+    let commitfolder = path.join(dst, "c5177f6b23685043918d43feeabb6d8ddb01120f");
+    let releasefolder = path.join(dst, "release");
+    nodeutil.mkdirP(releasefolder)
+    nodeutil.cpR(commitfolder, releasefolder);
+    let docsfolder_rel = path.join(dst, "release/docs");
+    nodeutil.mkdirP(docsfolder_rel)
+    let source_docs = path.join(dst, "en/docs",versions.target);
+    nodeutil.cpR(source_docs, docsfolder_rel);
+    let docsfiles_rel = path.join(dst, "release/docfiles");
+    nodeutil.mkdirP(docsfiles_rel)
+    let source_docfiles = path.join(dst, "docfiles");
+    nodeutil.cpR(source_docfiles, docsfiles_rel);
+    rimrafAsync(source_docfiles, {})
+    
     pxt.log(`All docs written.`);
 }
 
@@ -4222,14 +4606,18 @@ export function staticpkgAsync(parsed: commandParser.ParsedCommand) {
 
 function internalStaticPkgAsync(builtPackaged: string, label: string, minify: boolean, noAppCache?: boolean) {
     const pref = path.resolve(builtPackaged);
-    const localDir = !label ? "./" : `${U.startsWith(label, ".") || U.startsWith(label, "/") ? "" : "/"}${label}${U.endsWith(label, "/") ? "" : "/"}`;
+    const localDir = "";//!label ? "./" : `${U.startsWith(label, ".") || U.startsWith(label, "/") ? "" : "/"}${label}${U.endsWith(label, "/") ? "" : "/"}`;
+    //nodeutil.mkdirP("lzma");
+    nodeutil.cp("node_modules/lzma/src/lzma_worker-min.js","lzma");
+
     return uploadCoreAsync({
         label: label || "main",
         pkgversion: "0.0.0",
         fileList: pxtFileList("node_modules/pxt-core/")
             .concat(targetFileList())
             .concat(["targetconfig.json"])
-            .concat(nodeutil.allFiles("built/hexcache")),
+            .concat(nodeutil.allFiles("built/hexcache"))
+            .concat(["lzma/lzma_worker-min.js"]),
         localDir,
         target: (pxt.appTarget.id || "unknownstatic"),
         builtPackaged,
