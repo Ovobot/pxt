@@ -53,11 +53,11 @@ namespace pxt.Cloud {
     }
 
     export function apiRequestWithCdnAsync(options: Util.HttpRequestOptions) {
-        if (!useCdnApi())
+        //if (!useCdnApi())
             return privateRequestAsync(options)
-        options.url = cdnApiUrl(options.url)
-        return Util.requestAsync(options)
-            .catch(e => handleNetworkError(options, e))
+        // options.url = cdnApiUrl(options.url)
+        // return Util.requestAsync(options)
+        //     .catch(e => handleNetworkError(options, e))
     }
 
     function handleNetworkError(options: Util.HttpRequestOptions, e: any) {
