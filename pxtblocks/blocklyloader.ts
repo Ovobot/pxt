@@ -737,7 +737,7 @@ namespace pxt.blocks {
                                         width: 36,
                                         height: 36,
                                         value: v.name
-                                    } : k,
+                                    } :v.attributes.frames ? {frame:v.attributes.frameImages} : k,
                                     v.namespace + "." + v.name
                                 ];
                             });

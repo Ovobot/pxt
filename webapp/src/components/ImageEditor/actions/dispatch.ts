@@ -19,6 +19,7 @@ export const dispatchNewFrame = (index?: number) => ({ type: actions.NEW_FRAME, 
 export const dispatchDeleteFrame = (index: number) => ({ type: actions.DELETE_FRAME, index });
 export const dispatchDuplicateFrame = (index: number) => ({ type: actions.DUPLICATE_FRAME, index });
 export const dispatchChangeCurrentFrame = (index: number) => ({ type: actions.CHANGE_CURRENT_FRAME, index });
+export const dispatchChangeCurrentMainFrame = (index:number) => ({ type: actions.CHANGE_CURRENT_MAIN_FRAME, index });
 export const dispatchMoveFrame = (oldIndex: number, newIndex: number) => ({ type: actions.MOVE_FRAME, oldIndex, newIndex });
 export const dispatchChangeInterval = (newInterval: number) => ({ type: actions.CHANGE_INTERVAL, newInterval });
 export const dispatchChangePreviewAnimating = (animating: boolean) => ({ type: actions.CHANGE_PREVIEW_ANIMATING, animating });
@@ -31,6 +32,7 @@ export const dispatchHideAlert = () => ({ type: actions.HIDE_ALERT });
 export const dispatchSwapBackgroundForeground = () => ({ type: actions.SWAP_FOREGROUND_BACKGROUND });
 export const dispatchChangeBackgroundColor = (backgroundColor: number) => ({ type: actions.CHANGE_BACKGROUND_COLOR, backgroundColor })
 export const dispatchSetInitialFrames = (frames: pxt.sprite.ImageState[], interval: number) => ({ type: actions.SET_INITIAL_FRAMES, frames, interval });
+export const dispatchChangeMainFrames = (frames: pxt.sprite.ImageState[], interval: number) => ({ type: actions.SET_CHANGE_FRAMES, frames, interval });
 export const dispatchSetInitialState = (state: EditorState, past: AnimationState[]) => ({ type: actions.SET_INITIAL_STATE, state, past });
 export const dispatchSetInitialTilemap = (tilemap: pxt.sprite.BitmapData, tileset: pxt.sprite.TileSet, gallery: GalleryTile[], layers: pxt.sprite.BitmapData[], nextId: number, referencedTiles: number[]) => ({ type: actions.SET_INITIAL_TILEMAP, tilemap, tileset, layers, gallery, nextId, referencedTiles });
 export const dispatchChangeTilePaletteCategory = (category: TileCategory) => ({ type: actions.CHANGE_TILE_PALETTE_CATEGORY, category });

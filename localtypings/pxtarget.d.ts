@@ -562,6 +562,7 @@ declare namespace ts.pxtc {
         icon?: string;
         jresURL?: string;
         iconURL?: string;
+        frameImages?:string;
         imageLiteral?: number;
         imageLiteralColumns?: number; // optional number of columns
         imageLiteralRows?: number; // optional number of rows
@@ -586,6 +587,7 @@ declare namespace ts.pxtc {
         group?: string;
         whenUsed?: boolean;
         jres?: string;
+        frames?:string;
         tags?: string; // value used to describe an element in a gallery when filtering / searching
         useLoc?: string; // The qName of another API whose localization will be used if this API is not translated and if both block definitions are identical
         topblock?: boolean;

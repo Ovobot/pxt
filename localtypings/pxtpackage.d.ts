@@ -170,6 +170,11 @@ declare namespace pxt {
         mimeType: string;
     }
 
+    interface JAni{
+        id:string;
+        data:string;
+    }
+
     type SnippetOutputType = 'blocks'
     type SnippetOutputBehavior = /*assumed default*/'merge' | 'replace'
     interface SnippetConfig {

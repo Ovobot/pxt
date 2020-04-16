@@ -491,6 +491,8 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
 
     const jres = pkg.mainPkg.getJRes();
 
+    const jani = pkg.mainPkg.getFrames();
+
     for (const qName of Object.keys(result.byQName)) {
         let si = result.byQName[qName]
 
@@ -505,6 +507,15 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
                 si.attributes.jresURL = "data:" + jr.mimeType + ";base64," + jr.data
             }
         }
+
+        let frames = si.attributes.frames
+        if(frames){
+            if(frames == "true") frames = qName
+            let ja = U.lookup(jani || {}, frames)
+            si.attributes.frameImages = ja.data;
+            
+        }
+
     }
 
     return result;

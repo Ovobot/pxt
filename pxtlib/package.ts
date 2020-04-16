@@ -201,6 +201,27 @@ namespace pxt {
             return allres
         }
 
+        parseAni(allani:Map<JAni> = {}){
+            for(const f of this.getFiles()){
+                if(U.endsWith(f,".ani")){
+                    let js:Map<string> = JSON.parse(this.readFile(f))
+                    for (let k of Object.keys(js)) {
+                        if (k == "*") continue
+                        let v = js[k]
+                        let ns =  "animation"
+                        if (ns) ns += "."
+                        let id = ns + k
+                        allani[id] = {
+                            id,
+                            data: v
+                        }
+                    }
+                }
+
+            }
+            return allani
+        }
+
         private resolveVersionAsync() {
             let v = this._verspec
 
@@ -707,6 +728,7 @@ namespace pxt {
     export class MainPackage extends Package {
         public deps: Map<Package> = {};
         private _jres: Map<JRes>;
+        private _frames: Map<JAni>;
 
         constructor(public _host: Host) {
             super("this", "file:.", null, null)
@@ -791,6 +813,16 @@ namespace pxt {
                 }
             }
             return this._jres
+        }
+
+        getFrames(){
+            if(!this._frames){
+                this._frames = {}
+                for(const pkg of this.sortedDeps()){
+                    pkg.parseAni(this._frames)
+                }
+            }
+            return this._frames
         }
 
         // undefined == uncached

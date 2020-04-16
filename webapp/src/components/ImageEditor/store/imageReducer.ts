@@ -263,6 +263,7 @@ const topReducer = (state: ImageEditorStore = initialStore, action: any): ImageE
                     future: []
                 }
             }
+
         case actions.SET_INITIAL_TILEMAP:
             return {
                 ...state,
@@ -320,7 +321,7 @@ const animationReducer = (state: AnimationState, action: any): AnimationState =>
             return { ...state, aspectRatioLocked: !state.aspectRatioLocked };
         case actions.CHANGE_CURRENT_FRAME:
             tickEvent(`change-frame`);
-            return { ...state, currentFrame: action.index };
+            return { ...state, currentFrame: action.index };  
         case actions.CHANGE_INTERVAL:
             tickEvent(`change-interval`);
             return { ...state, interval: action.newInterval };
@@ -334,6 +335,13 @@ const animationReducer = (state: AnimationState, action: any): AnimationState =>
                     bitmap: pxt.sprite.Bitmap.fromData(frame.bitmap).resize(width, height).data()
                 }))
             };
+        case actions.SET_CHANGE_FRAMES:
+            tickEvent(`change-frames`);
+            return {
+                ...state,
+                interval: action.interval,
+                frames: action.frames,
+            }
         case actions.IMAGE_EDIT:
             tickEvent(`image-edit`);
             return {
@@ -375,6 +383,7 @@ const animationReducer = (state: AnimationState, action: any): AnimationState =>
                 currentFrame: state.frames.length,
             };
         case actions.MOVE_FRAME:
+            console.log("move frames:");
             if (action.newIndex < 0 || action.newIndex >= state.frames.length ||
                 action.newIndex < 0 || action.newIndex >= state.frames.length) return state;
 

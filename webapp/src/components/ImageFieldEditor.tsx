@@ -3,14 +3,18 @@ import * as React from "react";
 import { FieldEditorComponent } from '../blocklyFieldView';
 import { ImageEditor } from "./ImageEditor/ImageEditor";
 import { setTelemetryFunction } from './ImageEditor/store/imageReducer';
+import { TimelineFrame } from "./ImageEditor/TimelineFrame";
 
 export interface ImageFieldEditorProps {
     singleFrame: boolean;
+    options:any;
+    
 }
 
 export interface ImageFieldEditorState {
     galleryVisible: boolean;
     galleryFilter?: string;
+    segmentPos:string;
 }
 
 export type ImageType = pxt.sprite.Bitmap | pxt.sprite.ImageState;
@@ -19,31 +23,87 @@ export class ImageFieldEditor<U extends ImageType> extends React.Component<Image
     protected blocksInfo: pxtc.BlocksInfo;
     protected ref: ImageEditor;
     protected closeEditor: () => void;
-
+    protected animationItems?:any[];
     constructor(props: ImageFieldEditorProps) {
         super(props);
 
         this.state = {
-            galleryVisible: false
+            galleryVisible: false,
+            segmentPos:"left"
         };
         setTelemetryFunction(tickImageEditorEvent);
     }
 
+    protected onAnimations = () => {
+        this.setState({
+            galleryVisible: false,
+            segmentPos:"center"
+        });
+    }
+
+    protected onGallery = () => {
+        this.setState({
+            galleryVisible: true,
+            segmentPos:"right"
+        });
+    }
+
+    protected onItemEditor = () => {
+        this.setState({
+            galleryVisible: false,
+            segmentPos:"left"
+        });
+    }
+    
+    
+
     render() {
+        const { singleFrame} = this.props;
+        if(singleFrame){
+            return <div className="image-editor-wrapper">
+                <div className="gallery-editor-header">
+                    <div className={`gallery-editor-toggle ${this.state.galleryVisible ? "right" : "left"} ${pxt.BrowserUtils.isEdge() ? "edge" : ""}`} onClick={this.toggleGallery} role="button" aria-pressed={this.state.galleryVisible}>
+                        <div className="gallery-editor-toggle-label gallery-editor-toggle-left">
+                            {lf("Editor")}
+                        </div>
+                        <div className="gallery-editor-toggle-label gallery-editor-toggle-right">
+                            {lf("Gallery")}
+                        </div>
+                        <div className="gallery-editor-toggle-handle"/>
+                    </div>
+                </div>
+                <div className="image-editor-gallery-content">
+                    <ImageEditor ref="image-editor" singleFrame={this.props.singleFrame} options={this.props.options} onDoneClicked={this.onDoneClick} />
+                    <ImageEditorGallery
+                        items={this.blocksInfo && pxt.sprite.getGalleryItems(this.blocksInfo, "Image")}
+                        hidden={!this.state.galleryVisible}
+                        filterString={this.state.galleryFilter}
+                        onItemSelected={this.onGalleryItemSelect} />
+                </div>
+            </div>
+        } 
+
         return <div className="image-editor-wrapper">
             <div className="gallery-editor-header">
-                <div className={`gallery-editor-toggle ${this.state.galleryVisible ? "right" : "left"} ${pxt.BrowserUtils.isEdge() ? "edge" : ""}`} onClick={this.toggleGallery} role="button" aria-pressed={this.state.galleryVisible}>
-                    <div className="gallery-editor-toggle-label gallery-editor-toggle-left">
+                <div className={`gallery-editor-segment ${this.state.segmentPos} ${pxt.BrowserUtils.isEdge() ? "edge" : ""}`}  role="button" aria-pressed={this.state.galleryVisible}>
+                    <div className="gallery-editor-toggle-label gallery-editor-segment-left" onClick={this.onItemEditor}>
                         {lf("Editor")}
                     </div>
-                    <div className="gallery-editor-toggle-label gallery-editor-toggle-right">
+                    <div className="gallery-editor-toggle-label gallery-editor-segment-center" onClick={this.onAnimations}>
+                        {lf("Animations")}
+                    </div>
+                    <div className="gallery-editor-toggle-label gallery-editor-segment-right" onClick={this.onGallery}>
                         {lf("Gallery")}
                     </div>
                     <div className="gallery-editor-toggle-handle"/>
                 </div>
             </div>
             <div className="image-editor-gallery-content">
-                <ImageEditor ref="image-editor" singleFrame={this.props.singleFrame} onDoneClicked={this.onDoneClick} />
+                <ImageEditor ref="image-editor" singleFrame={this.props.singleFrame} options={this.props.options} onDoneClicked={this.onDoneClick} />
+                <ImageEditorAnimations 
+                    items={this.animationItems}
+                    hidden={!(this.state.segmentPos == "center")}
+                    onItemSelected={this.onAnimationItemSelect}/>
                 <ImageEditorGallery
                     items={this.blocksInfo && pxt.sprite.getGalleryItems(this.blocksInfo, "Image")}
                     hidden={!this.state.galleryVisible}
@@ -51,6 +111,8 @@ export class ImageFieldEditor<U extends ImageType> extends React.Component<Image
                     onItemSelected={this.onGalleryItemSelect} />
             </div>
         </div>
+
+
     }
 
     componentDidMount() {
@@ -84,6 +146,18 @@ export class ImageFieldEditor<U extends ImageType> extends React.Component<Image
                     galleryFilter: options.filter
                 });
             }
+            if (!this.props.singleFrame){
+                let allAnis =  options.editorFrames as pxt.sprite.BitmapData[][];//pxt.sprite.BitmapData[][]
+                let allFrames:any = [];
+                allAnis.forEach(ani => {
+                    let frames =  ani.map(b => pxt.sprite.Bitmap.fromData(b));
+                    let renderFrames = frames.map(frame => ({ bitmap: frame.data() }));
+                    allFrames.push(renderFrames);
+                    
+                });
+                this.animationItems = allFrames;
+            }
+
         }
     }
 
@@ -128,7 +202,7 @@ export class ImageFieldEditor<U extends ImageType> extends React.Component<Image
             };
         }
 
-        this.ref.initAnimation(value.frames.map(b => pxt.sprite.Bitmap.fromData(b)), value.interval);
+        this.ref.initAnimation(value.frames.map(b => pxt.sprite.Bitmap.fromData(b)), value.interval, options.mainIndex);
     }
 
     protected toggleGallery = () => {
@@ -151,9 +225,25 @@ export class ImageFieldEditor<U extends ImageType> extends React.Component<Image
         tickImageEditorEvent("gallery-selection");
 
         this.setState({
-            galleryVisible: false
+            galleryVisible: false,
+            segmentPos:"left"
         });
     }
+
+    protected onAnimationItemSelect = (item: pxt.sprite.ImageState[]) => {
+        if (this.ref) {
+            this.ref.setCurrentMainFrame(item);
+        }
+
+        tickImageEditorEvent("animations-selection");
+
+        this.setState({
+            galleryVisible: false,
+            segmentPos:"left"
+        });
+    }
+
+    
 
     protected onDoneClick = () => {
         if (this.closeEditor) this.closeEditor();
@@ -202,6 +292,73 @@ class ImageEditorGallery extends React.Component<ImageEditorGalleryProps, {}> {
                     items = pxt.sprite.filterItems(items, filterString.split(" "));
                 }
 
+                if (!hidden && items && items[index]) {
+                    onItemSelected(items[index]);
+                }
+            }
+        }
+
+        return this.handlers[index];
+    }
+}
+
+interface ImageEditorAnimationProps{
+    items:any[];
+    hidden: boolean;
+    onItemSelected: (item: pxt.sprite.ImageState[]) => void;
+
+    //onItemSelected: (item: pxt.sprite.GalleryItem) => void;
+
+}
+
+class ImageEditorAnimations extends React.Component<ImageEditorAnimationProps,{}>{
+    protected handlers: (() => void)[] = [];
+
+    render() {
+        let { items, hidden } = this.props;
+        let colors = [
+            "#000000",
+            "#ffffff",
+            "#ff2121",
+            "#ff93c4",
+            "#ff8135",
+            "#fff609",
+            "#249ca3",
+            "#78dc52",
+            "#003fad",
+            "#87f2ff",
+            "#8e2ec4",
+            "#a4839f",
+            "#5c406c",
+            "#e5cdc4",
+            "#91463d",
+            "#000000"
+        ]
+        // if (filterString) {
+        //     items = pxt.sprite.filterItems(items, filterString.split(" "));
+        // }
+        //frames: pxt.sprite.ImageState[];
+        return <div className={`image-editor-gallery ${items && !hidden ? "visible" : ""}`}>
+            {items && items.map((item, index) =>
+                <button
+                    key={index}
+                    id={`:${index}`}
+                    role="menuitem"
+                    className="sprite-gallery-button sprite-editor-card"
+                    title={item.alt}
+                    data-value={item.qName}
+                    onClick={this.clickHandler(index)}>
+                        <TimelineFrame frames={true ? item : [item[0]]} colors={colors} interval={100} animating={true} />
+                </button>
+            )}
+        </div>
+    }
+
+    clickHandler(index: number) {
+        if (!this.handlers[index]) {
+            this.handlers[index] = () => {
+                let { items, onItemSelected, hidden } = this.props;
+        
                 if (!hidden && items && items[index]) {
                     onItemSelected(items[index]);
                 }
