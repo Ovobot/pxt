@@ -280,7 +280,8 @@ export function init(): void {
         pxt.commands.deployFallbackAsync = hidDeployCoreAsync;
     } else if (pxt.BrowserUtils.isLocalHost() && Cloud.localToken && !forceHexDownload) { // local node.js
         pxt.debug(`deploy: localhost`);
-        pxt.commands.deployFallbackAsync = localhostDeployCoreAsync;
+        pxt.commands.deployFallbackAsync = browserDownloadDeployCoreAsync;
+        //pxt.commands.deployFallbackAsync = localhostDeployCoreAsync;
     } else { // in browser
         pxt.debug(`deploy: browser`);
         pxt.commands.deployFallbackAsync = shouldUseWebUSB ? checkWebUSBThenDownloadAsync : browserDownloadDeployCoreAsync;
