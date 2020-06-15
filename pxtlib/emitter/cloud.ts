@@ -3,7 +3,9 @@ namespace pxt.Cloud {
     import Util = pxtc.Util;
 
     // hit /api/ to stay on same domain and avoid CORS
-    export let apiRoot = pxt.BrowserUtils.isLocalHost() || Util.isNodeJS ? "https://www.makecode.com/api/" : "/api/";
+    //export let apiRoot = pxt.BrowserUtils.isLocalHost() || Util.isNodeJS ? "https://arcade.ovobot.cn/api/" : "/api/";
+    export let apiRoot = "/api/";
+    export let gitApiRoot = "https://www.makecode.com/api/";
     export let accessToken = "";
     export let localToken = "";
     let _isOnline = true;
@@ -51,11 +53,11 @@ namespace pxt.Cloud {
     }
 
     export function apiRequestWithCdnAsync(options: Util.HttpRequestOptions) {
-        if (!useCdnApi())
+        //if (!useCdnApi())
             return privateRequestAsync(options)
-        options.url = cdnApiUrl(options.url)
-        return Util.requestAsync(options)
-            .catch(e => handleNetworkError(options, e))
+        // options.url = cdnApiUrl(options.url)
+        // return Util.requestAsync(options)
+        //     .catch(e => handleNetworkError(options, e))
     }
 
     function handleNetworkError(options: Util.HttpRequestOptions, e: any) {
@@ -68,6 +70,31 @@ namespace pxt.Cloud {
         } else {
             return Promise.reject(e)
         }
+    }
+    
+    export function privateGitRequestAsync(options: Util.HttpRequestOptions) {
+        options.url = pxt.webConfig && pxt.webConfig.isStatic && !options.forceLiveEndpoint ? pxt.webConfig.relprefix + options.url : gitApiRoot + options.url;
+        options.allowGzipPost = true
+        if (!Cloud.isOnline()) {
+            return offlineError(options.url);
+        }
+        if (!options.headers) options.headers = {}
+        if (pxt.BrowserUtils.isLocalHost()) {
+            if (Cloud.localToken)
+                options.headers["Authorization"] = Cloud.localToken;
+        } else if (accessToken) {
+            options.headers["x-td-access-token"] = accessToken
+        }
+        return Util.requestAsync(options)
+            .catch(e => handleNetworkError(options, e))
+    }
+
+    export function gitApiRequestWithCdnAsync(options: Util.HttpRequestOptions) {
+        if (!useCdnApi())
+            return privateGitRequestAsync(options)
+        options.url = cdnApiUrl(options.url)
+        return Util.requestAsync(options)
+            .catch(e => handleNetworkError(options, e))
     }
 
     export function privateRequestAsync(options: Util.HttpRequestOptions) {
@@ -100,7 +127,8 @@ namespace pxt.Cloud {
             return Promise.resolve(undefined);
 
         const targetVersion = pxt.appTarget.versions && pxt.appTarget.versions.target;
-        const url = pxt.webConfig && pxt.webConfig.isStatic ? `targetconfig.json` : `config/${pxt.appTarget.id}/targetconfig${targetVersion ? `/v${targetVersion}` : ''}`;
+        //const url = pxt.webConfig && pxt.webConfig.isStatic ? `targetconfig.json` : `config/${pxt.appTarget.id}/targetconfig${targetVersion ? `/v${targetVersion}` : ''}`;
+        const url = `config/${pxt.appTarget.id}/targetconfig${targetVersion ? `/v${targetVersion}` : ''}`;
         if (pxt.BrowserUtils.isLocalHost())
             return localRequestAsync(url).then(r => r ? r.json : undefined)
         else
@@ -180,6 +208,7 @@ namespace pxt.Cloud {
     }
 
     export function privatePostAsync(path: string, data: any, forceLiveEndpoint: boolean = false) {
+        console.log("post data ",data);
         return privateRequestAsync({ url: path, data: data || {}, forceLiveEndpoint }).then(resp => resp.json)
     }
 
