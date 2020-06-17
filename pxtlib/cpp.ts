@@ -1273,7 +1273,9 @@ namespace pxt.hex {
             // const forceLive = pxt.webConfig && pxt.webConfig.isStatic;
             // return (cdnUrlPromise = Cloud.privateGetAsync("clientconfig", forceLive)
             //     .then(r => r.primaryCdnUrl));
-            return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
+            
+            return (cdnUrlPromise = Promise.resolve("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com"))
+            //return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
         }
     }
 
@@ -1291,6 +1293,7 @@ namespace pxt.hex {
                 return getCdnUrlAsync()
                     .then(url => {
                         hexurl = url + "/compile/" + extInfo.sha
+                        pxt.log(`get url ${hexurl}`);
                         return U.httpGetTextAsync(hexurl + ".hex")
                     })
                     .then(r => r, e =>

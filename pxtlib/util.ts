@@ -862,7 +862,8 @@ namespace ts.pxtc.Util {
         // hitting the cloud
         function downloadFromCloudAsync(strings?: pxt.Map<string>) {
             pxt.debug(`downloading translations for ${lang} ${filename} ${branch || ""}`);
-            let host = pxt.BrowserUtils.isLocalHost() || pxt.webConfig.isStatic ? "https://arcade.ovobot.cn/api/" : ""
+            //https://arcade.ovobot.cn/
+            let host = pxt.BrowserUtils.isLocalHost() || pxt.webConfig.isStatic ? "api/" : ""
             // https://pxt.io/api/translations?filename=strings.json&lang=pl&approved=true&branch=v0
             let url = `${host}translations?lang=${encodeURIComponent(lang)}&filename=${encodeURIComponent(filename)}&approved=true`;
             if (branch) url += '&branch=' + encodeURIComponent(branch);
