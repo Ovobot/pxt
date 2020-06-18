@@ -752,13 +752,13 @@ function gitSaveLocalAsync(opts: UploadOptions, uplReqs: Map<BlobReq>){
                             for (let uu of U.values(uplReqs)){
                                 if(findCDNfp == uu.filename){
                                     console.log("found file" ,findCDNfp , "hash =" , uu.hash);
-                                    u.content = u.content.replace(replfp,"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uu.hash+"/"+findCDNfp)
+                                    u.content = u.content.replace(replfp,"https://pxt-astone.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uu.hash+"/"+findCDNfp)
                                 }
                             }
                             //console.log("should find cdn file" ,findCDNfp);
                         }
                     }
-                    u.content = U.replaceAll(u.content, "@commitCdnUrl@","https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/");
+                    u.content = U.replaceAll(u.content, "@commitCdnUrl@","https://pxt-astone.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/");
                     // let match_commit = u.content.match(reg_commit);
                     // if(match_commit){
                     //     // console.log("match count" , match.length);
@@ -767,7 +767,7 @@ function gitSaveLocalAsync(opts: UploadOptions, uplReqs: Map<BlobReq>){
                     //         for (let uu of U.values(uplReqs)){
                     //             if(findCDNfp == uu.filename){
                     //                 console.log("found commit file" ,findCDNfp , "hash =" , uu.hash);
-                    //                 u.content = u.content.replace(replfp,"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/"+findCDNfp)
+                    //                 u.content = u.content.replace(replfp,"https://pxt-astone.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/"+findCDNfp)
                     //             }
                     //         }
                     //         //console.log("should find cdn file" ,findCDNfp);
@@ -1052,10 +1052,10 @@ function uploadCoreAsync(opts: UploadOptions) {
         "gifworkerjs": "/---gifworker",//"gifjs/gif.worker.js"
         "pxtVersion": pxtVersion(),
         "pxtRelId": "c5177f6b23685043918d43feeabb6d8ddb01120f",
-        "pxtCdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
-        "commitCdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
-        "blobCdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
-        "cdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com",
+        "pxtCdnUrl": "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
+        "commitCdnUrl": "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
+        "blobCdnUrl": "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/commit/c5177f6b23685043918d43feeabb6d8ddb01120f/",
+        "cdnUrl": "https://pxt-astone.oss-cn-shanghai.aliyuncs.com",
         "targetVersion": opts.pkgversion,
         "targetRelId": "c5177f6b23685043918d43feeabb6d8ddb01120f",
         "targetUrl": "https://arcade.ovobot.cn",
@@ -1098,7 +1098,7 @@ function uploadCoreAsync(opts: UploadOptions) {
             "pxtCdnUrl": opts.localDir,
             "commitCdnUrl": opts.localDir,
             "blobCdnUrl": opts.localDir,
-            "cdnUrl": "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com",
+            "cdnUrl": "https://pxt-astone.oss-cn-shanghai.aliyuncs.com",
             "targetVersion": opts.pkgversion,
             "targetRelId": "",
             "targetUrl": "https://arcade.ovobot.cn",
@@ -1806,7 +1806,7 @@ function saveThemeJson(cfg: pxt.TargetBundle, localDir?: boolean, packaged?: boo
             .filter(k => /(logo|hero)$/i.test(k) && /^\.\//.test(logos[k]))
             .forEach(k => {
                 let hash = uploadArtFile(logos[k]);
-                logos[k] = hash.replace("@cdnUrl@",'https://pxt-arcade.oss-cn-shanghai.aliyuncs.com');
+                logos[k] = hash.replace("@cdnUrl@",'https://pxt-astone.oss-cn-shanghai.aliyuncs.com');
                 console.log("save logo|hero = " , logos[k]);
                 //logos[k] = path.join('./docs', logos[k]).replace(/\\/g, "/");
             })
@@ -2588,10 +2588,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
     docsTemplate = docsTemplate.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
         //console.log("find doccdn url = ",url);    
         if(uplReqs_proj[url]){
-            let cdnurl = "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
+            let cdnurl = "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
             return `${cdnurl}"`
         } else if(uplReqs[url]){
-            let cdnurl = "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
+            let cdnurl = "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
             return `${cdnurl}"`
         } else {
             let cdnurl = url;
@@ -2636,12 +2636,12 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         for (let replfp of match){
                             let findCDNfp = replfp;
                             let hashKey = replfp.slice(1);
-                            md = md.replace(replfp,"\"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
+                            md = md.replace(replfp,"\"https://pxt-astone.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
                             //console.log("should find cdn file" ,findCDNfp);
                         }
                     }
                     md = md.replace(/(!\[.*?\]\()(.+?)(\))/g, function(whole, pre, src, end) {
-                        return pre + "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[src] + src + end;
+                        return pre + "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[src] + src + end;
                     });
                     let patchedMd = md;
                     //const patchedMd = md.replace(/\"\/static\//g, `docs/static/`);
@@ -2673,10 +2673,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
                     // console.log("href hash ", uplReqs_proj[url]);
 
                     if(uplReqs_proj[url]){
-                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        let cdnurl = path.join("https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
                         return ` href="${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        let cdnurl = path.join("https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
                         return ` href="${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2693,12 +2693,12 @@ function renderDocs(builtPackaged: string, localDir: string) {
 
                     if(uplReqs_proj[url]){
                         
-                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
-                        //"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
+                        let cdnurl = path.join("https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        //"https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
                         return ` src="${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
-                        //"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
+                        let cdnurl = path.join("https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        //"https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
                         return ` src="${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2708,10 +2708,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
 
                 html = html.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
                     if(uplReqs_proj[url]){
-                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        let cdnurl = path.join("https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
                         return `${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        let cdnurl = path.join("https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
                         return `${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2759,12 +2759,12 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         for (let replfp of match){
                             let findCDNfp = replfp;
                             let hashKey = replfp.slice(1);
-                            md = md.replace(replfp,"\"https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
+                            md = md.replace(replfp,"\"https://pxt-astone.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
                             //console.log("should find cdn file" ,findCDNfp);
                         }
                     }
                     md = md.replace(/(!\[.*?\]\()(.+?)(\))/g, function(whole, pre, src, end) {
-                        return pre + "https://pxt-arcade.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[src] + src + end;
+                        return pre + "https://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[src] + src + end;
                     });
                     let patchedMd = md;
                     //const patchedMd = md.replace(/\"\/static\//g, `docs/static/`);
