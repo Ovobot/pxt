@@ -37,7 +37,18 @@ const _data: { [key: string]: KeymapData[] } = {
                 "a": ["U"],
                 "b": ["O"]
             }
-        } ]
+        } ],
+    "xtronpro": [ {
+            title: "key map",
+            map: {
+                "up": ["↑", "W"],
+                "down": ["↓", "S"],
+                "left": ["→", "A"],
+                "right": ["←", "D"],
+                "a": ["Z", "space"],
+                "b": ["X", "enter"]
+            }
+        }]
     }
 export class Keymap extends data.Component<ISettingsProps, KeymapState> {
     private keymap: KeymapData[];
