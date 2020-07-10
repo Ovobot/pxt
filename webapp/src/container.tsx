@@ -448,10 +448,10 @@ export class EditorSelector extends data.Component<IEditorSelectorProps, {}> {
             <div id="editortoggle" className="ui grid padded">
                 {this.props.sandbox && <SandboxMenuItem parent={this.props.parent} />}
                 <BlocksMenuItem parent={this.props.parent} />
-                {pxt.Util.isPyLangPref() && pythonEnabled ? <PythonMenuItem parent={this.props.parent} /> : <JavascriptMenuItem parent={this.props.parent} />}
+                {pythonEnabled ? <PythonMenuItem parent={this.props.parent} /> : <JavascriptMenuItem parent={this.props.parent} />}
                 {pythonEnabled && <sui.DropdownMenu id="editordropdown" role="menuitem" icon="chevron down" rightIcon title={lf("Select code editor language")} className={`item button attached right ${dropdownActive ? "active" : ""}`}>
-                    <JavascriptMenuItem parent={this.props.parent} />
                     <PythonMenuItem parent={this.props.parent} />
+                    <JavascriptMenuItem parent={this.props.parent} />
                 </sui.DropdownMenu>}
                 <div className={`ui item toggle ${pythonEnabled ? 'hasdropdown' : ''}`}></div>
             </div>
