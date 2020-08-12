@@ -54,7 +54,8 @@ namespace pxt.editor {
         | "toggletrace" // EditorMessageToggleTraceRequest
         | "togglehighcontrast"
         | "togglegreenscreen"
-        | "settracestate" // 
+        | "settracestate" //
+        | "setsimulatorfullscreen" // EditorMessageSimulatorFullScreenRequest
 
         | "print" // print code
         | "pair" // pair device
@@ -225,6 +226,12 @@ namespace pxt.editor {
         intervalSpeed?: number;
     }
 
+    export interface EditorMessageSetSimulatorFullScreenRequest extends EditorMessageRequest {
+        action: "setsimulatorfullscreen";
+        enabled: boolean;
+    }
+
+
     export interface InfoMessage {
         versions: pxt.TargetVersions;
         locale: string;
@@ -390,6 +397,11 @@ namespace pxt.editor {
                                     return Promise.resolve()
                                         .then(() => projectView.setTrace(trcmsg.enabled, trcmsg.intervalSpeed));
                                 }
+                                case "setsimulatorfullscreen": {
+                                    const fsmsg = data as EditorMessageSetSimulatorFullScreenRequest;
+                                    return Promise.resolve()
+                                        .then(() => projectView.setSimulatorFullScreen(fsmsg.enabled));
+                                }
                                 case "togglehighcontrast": {
                                     return Promise.resolve()
                                         .then(() => projectView.toggleHighContrast());
@@ -403,8 +415,7 @@ namespace pxt.editor {
                                         .then(() => projectView.printCode());
                                 }
                                 case "pair": {
-                                    return Promise.resolve()
-                                        .then(() => projectView.pair());
+                                    return projectView.pairAsync();
                                 }
                                 case "info": {
                                     return Promise.resolve()

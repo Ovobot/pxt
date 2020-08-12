@@ -4,7 +4,6 @@
 /// <reference path="../built/pxteditor.d.ts" />
 /// <reference path="../built/pxtcompiler.d.ts" />
 /// <reference path="../built/pxtblocks.d.ts" />
-/// <reference path="../built/pxteditor.d.ts" />
 /// <reference path="../built/pxtsim.d.ts" />
 
 namespace pxt.runner {
@@ -149,6 +148,19 @@ namespace pxt.runner {
     }
 
     export let mainPkg: pxt.MainPackage;
+    let tilemapProject: TilemapProject;
+
+    if (!pxt.react.getTilemapProject) {
+        pxt.react.getTilemapProject = () => {
+            if (!tilemapProject) {
+                tilemapProject = new TilemapProject();
+                tilemapProject.loadPackage(mainPkg);
+            }
+
+            return tilemapProject;
+        }
+    }
+
 
     function addPackageToConfig(cfg: pxt.PackageConfig, dep: string) {
         let m = /^([a-zA-Z0-9_-]+)(=(.+))?$/.exec(dep);
@@ -398,15 +410,6 @@ namespace pxt.runner {
                 pxt.appTarget.versions.targetCrowdinBranch,
                 localeLiveRx.test(localeInfo)
             );
-        }
-        if (editorLanguageMode == LanguageMode.Blocks) {
-            document.body.classList.remove("editorlang-text");
-            $('link[title="light"]').prop('disabled', false);
-            $('link[title="dark"]').prop('disabled', true);
-        } else {
-            document.body.classList.add("editorlang-text");
-            $('link[title="light"]').prop('disabled', true);
-            $('link[title="dark"]').prop('disabled', false);
         }
 
         return Promise.resolve();
@@ -794,18 +797,40 @@ ${linkString}
 </aside>
 
 <aside id=hint class=box>
-    <div class="ui icon green message">
+    <div class="ui info message">
         <div class="content">
-            <div class="header">Hint</div>
             @BODY@
         </div>
     </div>
 </aside>
 
 <aside id=tutorialhint class=box>
-    <div class="ui icon orange message" data-inferred>
+    <div class="ui hint message">
         <div class="content">
-            <div class="header">Tutorial Hint</div>
+            @BODY@
+        </div>
+    </div>
+</aside>
+
+<aside id=reminder class=box>
+    <div class="ui warning message">
+        <div class="content">
+            @BODY@
+        </div>
+    </div>
+</aside>
+
+<aside id=alert class=box>
+    <div class="ui negative message">
+        <div class="content">
+            @BODY@
+        </div>
+    </div>
+</aside>
+
+<aside id=tip class=box>
+    <div class="ui positive message">
+        <div class="content">
             @BODY@
         </div>
     </div>

@@ -1,3 +1,4 @@
+/// <reference path='../../localtypings/dompurify.d.ts' />
 
 import * as React from "react";
 import * as data from "./data";
@@ -11,6 +12,8 @@ interface MarkedContentProps extends ISettingsProps {
     className?: string;
     // do not emit segment around snippets
     unboxSnippets?: boolean;
+    blocksDiffOptions?: pxt.blocks.DiffOptions;
+    textDiffOptions?: pxt.diff.RenderOptions;
     onDidRender?: () => void;
 }
 
@@ -87,7 +90,7 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
     }
 
     private renderSnippets(content: HTMLElement) {
-        const { parent, unboxSnippets, onDidRender } = this.props;
+        const { parent, unboxSnippets, onDidRender, blocksDiffOptions, textDiffOptions } = this.props;
 
         let promises: Promise<void>[] = [];
 
@@ -126,7 +129,7 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
                             action: "renderpython", ts: src
                         }).then(resp => resp.python))
                         .then(parts => {
-                            const el = pxt.diff.render(parts[0], parts[1], {
+                            const el = pxt.diff.render(parts[0], parts[1], textDiffOptions || {
                                 hideLineNumbers: true,
                                 hideMarkerLine: true,
                                 hideMarker: true,
@@ -143,7 +146,7 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
             .forEach((langBlock: HTMLElement) => {
                 promises.push(this.cachedRenderLangSnippetAsync(langBlock, code => {
                     const { fileA, fileB } = pxt.diff.split(code);
-                    const el = pxt.diff.render(fileA, fileB, {
+                    const el = pxt.diff.render(fileA, fileB, textDiffOptions || {
                         hideLineNumbers: true,
                         hideMarkerLine: true,
                         hideMarker: true,
@@ -171,7 +174,7 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
                 promises.push(this.cachedRenderLangSnippetAsync(langBlock, code =>
                     pxt.BrowserUtils.loadBlocklyAsync()
                         .then(() => {
-                            const diff = pxt.blocks.diffXml(oldXml, newXml);
+                            const diff = pxt.blocks.diffXml(oldXml, newXml, blocksDiffOptions);
                             return wrapBlockDiff(diff);
                         })));
             });
@@ -191,7 +194,7 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
                         .then(blocksInfo => Promise.mapSeries([oldSrc, newSrc], src =>
                             compiler.decompileBlocksSnippetAsync(src, blocksInfo))
                         )
-                        .then((resps) => pxt.blocks.decompiledDiffAsync(oldSrc, resps[0], newSrc, resps[1], {
+                        .then((resps) => pxt.blocks.decompiledDiffAsync(oldSrc, resps[0], newSrc, resps[1], blocksDiffOptions || {
                             hideDeletedTopBlocks: true,
                             hideDeletedBlocks: true
                         }))
@@ -301,7 +304,7 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
 
     private renderOthers(content: HTMLElement) {
         // remove package blocks
-        pxt.Util.toArray(content.querySelectorAll(`.lang-package,.lang-config`))
+        pxt.Util.toArray(content.querySelectorAll(`.lang-package,.lang-config,.lang-apis`))
             .forEach((langBlock: HTMLElement) => {
                 langBlock.parentNode.removeChild(langBlock);
             });
@@ -318,18 +321,32 @@ export class MarkedContent extends data.Component<MarkedContentProps, MarkedCont
         let renderer = new marked.Renderer()
         pxt.docs.setupRenderer(renderer);
 
+        // always popout external links
+        const linkRenderer = renderer.link;
+        renderer.link = function (href: string, title: string, text: string) {
+            const relative = /^[\/#]/.test(href);
+            const target = !relative ? '_blank' : '';
+            const html = linkRenderer.call(renderer, href, title, text);
+            return html.replace(/^<a /, `<a ${target ? `target="${target}"` : ''} rel="nofollow noopener" `);
+        };
+
         // Set markdown options
         marked.setOptions({
             renderer: renderer,
-            sanitize: true
+            sanitize: true,
+            sanitizer: pxt.docs.requireDOMSanitizer()
         })
+
+        // preemptively remove script tags, although they'll be escaped anyway
+        // prevents ugly <script ...> rendering in docs
+        markdown = markdown.replace(/<\s*script[^>]*>.*<\/\s*script\s*>/g, '');
 
         // Render the markdown and add it to the content div
         /* tslint:disable:no-inner-html (marked content is already sanitized) */
         content.innerHTML = marked(markdown);
         /* tslint:enable:no-inner-html */
 
-        // 
+        //
 
         // We'll go through a series of adjustments here, rendering inline blocks, blocks and snippets as needed
         this.renderInlineBlocks(content);
