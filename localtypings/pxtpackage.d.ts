@@ -1,6 +1,6 @@
 declare namespace pxt {
 
-    type CodeCardType = "file" | "example" | "codeExample" | "tutorial" | "side" | "template" | "package" | "hw" | "forumUrl";
+    type CodeCardType = "file" | "example" | "codeExample" | "tutorial" | "side" | "template" | "package" | "hw" | "forumUrl" | "forumExample" | "sharedExample";
     type CodeCardEditorType = "blocks" | "js" | "py";
 
     interface Map<T> {
@@ -24,6 +24,12 @@ declare namespace pxt {
         height: number;
     }
 
+    interface CodeCardAction {
+        url: string,
+        editor?: CodeCardEditorType;
+        cardType?: CodeCardType;
+    }
+
     /**
      * The schema for the pxt.json package files
      */
@@ -34,7 +40,7 @@ declare namespace pxt {
         // url to icon -- support for built-in packages only
         icon?: string;
         // semver description for support target version
-        documentation?: string; // doc page to open when loading project
+        documentation?: string; // doc page to open when loading project, used by sidedocs
         targetVersions?: TargetVersions; // versions of the target/pxt the package was compiled against
         description?: string;
         dependencies: Map<string>;
@@ -43,7 +49,9 @@ declare namespace pxt {
         files: string[];
         simFiles?: string[];
         testFiles?: string[];
+        fileDependencies?: Map<string>; // exclude certain files if dependencies are not fulfilled
         preferredEditor?: string; // tsprj, blocksprj, pyprj
+        languageRestriction?: pxt.editor.LanguageRestriction; // language restrictions that have been placed on the package
         testDependencies?: pxt.Map<string>;
         cppDependencies?: pxt.Map<string>;
         public?: boolean;
@@ -75,6 +83,10 @@ declare namespace pxt {
         snippetBuilders?: SnippetConfig[];
         experimentalHw?: boolean;
         requiredCategories?: string[]; // ensure that those block categories are visible
+        supportedTargets?: string[]; // a hint about targets in which this extension is supported
+        firmwareUrl?: string; // link to documentation page about upgrading firmware
+        disablesVariants?: string[]; // don't build these variants, when this extension is enabled
+        utf8?: boolean; // force compilation with UTF8 enabled
     }
 
     interface PackageExtension {
@@ -119,6 +131,7 @@ declare namespace pxt {
         labelClass?: string;
         tags?: string[]; // tags shown in home screen, colors specified in theme
         tabIndex?: number;
+        style?: string; // "card" | "item" | undefined;
 
         color?: string; // one of semantic ui colors
         description?: string;
@@ -129,6 +142,7 @@ declare namespace pxt {
         largeImageUrl?: string;
         videoUrl?: string;
         youTubeId?: string;
+        youTubePlaylistId?: string; // playlist this video belongs to
         buttonLabel?: string;
         time?: number;
         url?: string;
@@ -138,13 +152,9 @@ declare namespace pxt {
         responsive?: boolean;
         cardType?: CodeCardType;
         editor?: CodeCardEditorType;
+        otherActions?: CodeCardAction[];
 
         header?: string;
-        any?: number;
-        hardware?: number;
-        software?: number;
-        blocks?: number;
-        javascript?: number;
 
         tutorialStep?: number;
         tutorialLength?: number;
@@ -168,6 +178,8 @@ declare namespace pxt {
         icon?: string; // URL (usually data-URI) for the icon
         namespace?: string; // used to construct id
         mimeType: string;
+        tilemapTile?: boolean;
+        tileset?: string[];
     }
 
     interface JAni{

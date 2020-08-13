@@ -10,7 +10,7 @@ import { ImageCanvas } from './ImageCanvas';
 import { Alert, AlertInfo } from './Alert';
 
 import { Timeline } from './Timeline';
-import { addKeyListener, removeKeyListener } from './keyboardShortcuts';
+import { addKeyListener, removeKeyListener, setStore } from './keyboardShortcuts';
 
 import { dispatchChangeMainFrames,dispatchSetInitialState, dispatchImageEdit, dispatchChangeZoom, dispatchSetInitialFrames, dispatchSetInitialTilemap, dispatchCloseTileEditor, dispatchDisableResize } from './actions/dispatch';
 import { EditorState, AnimationState, TilemapState, GalleryTile, ImageEditorStore } from './store/imageReducer';
@@ -30,6 +30,7 @@ export interface ImageEditorProps {
     resizeDisabled?: boolean;
     store?: Store<ImageEditorStore>;
     onDoneClicked?: (value: string) => void;
+    nested?: boolean;
 }
 
 export interface ImageEditorState {
@@ -55,7 +56,7 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
         }
 
         if (this.props.resizeDisabled) {
-            this.dispatchOnStore(dispatchDisableResize());
+            this.disableResize();
         }
 
         this.unsubscribeChangeListener = this.getStore().subscribe(this.onStoreChange);
@@ -64,7 +65,7 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
     }
 
     componentWillUnmount() {
-        removeKeyListener();
+        if (!this.props.nested) removeKeyListener();
 
         if (this.unsubscribeChangeListener) {
             this.unsubscribeChangeListener()
@@ -93,7 +94,7 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
                     {alert && alert.title && <Alert title={alert.title} text={alert.text} options={alert.options} />}
                 </div>
             </Provider>
-            {editingTile && <ImageEditor store={tileEditorStore} onDoneClicked={this.onTileEditorFinished} initialValue={editTileValue} singleFrame={true} resizeDisabled={true} />}
+            {editingTile && <ImageEditor store={tileEditorStore} onDoneClicked={this.onTileEditorFinished} initialValue={editTileValue} singleFrame={true} resizeDisabled={true} nested={true} />}
         </div>
     }
 
@@ -137,7 +138,12 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
         const tilemapState = state.store.present as TilemapState;
         const { floating, overlayLayers, layerOffsetX, layerOffsetY } = tilemapState.tilemap;
         const layers = applyBitmapData(overlayLayers[0], floating && floating.overlayLayers && floating.overlayLayers[0], layerOffsetX, layerOffsetY);
-        return new pxt.sprite.TilemapData(imageStateToTilemap(tilemapState.tilemap), tilemapState.tileset, layers);
+
+        const out = new pxt.sprite.TilemapData(imageStateToTilemap(tilemapState.tilemap), tilemapState.tileset, layers);
+        out.deletedTiles = state.editor.deletedTiles;
+        out.editedTiles = state.editor.editedTiles;
+
+        return out;
     }
 
     getPersistentData(): ImageEditorSaveState {
@@ -161,6 +167,10 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
     setCurrentMainFrame(frames: pxt.sprite.ImageState[]){
         this.dispatchOnStore(dispatchChangeMainFrames(frames, 100));
     }
+    disableResize() {
+        this.dispatchOnStore(dispatchDisableResize());
+    }
+
     protected getStore() {
         return this.props.store || mainStore;
     }
@@ -170,19 +180,20 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
             this.props.onChange(this.props.singleFrame ? pxt.sprite.bitmapToImageLiteral(this.getCurrentFrame(), "typescript") : "")
         }
 
-        const state = this.getStore().getState();
+        const store = this.getStore();
+        const state = store.getState();
+        setStore(store);
 
         if (state.editor) this.setState({ alert: state.editor.alert });
 
         if (!!state.editor.editingTile != !!this.state.editingTile) {
             if (state.editor.editingTile) {
                 const index = state.editor.editingTile.tilesetIndex;
-
                 if (index) {
                     const tile = (state.store.present as TilemapState).tileset.tiles[index];
                     this.setState({
                         editingTile: true,
-                        editTileValue: pxt.sprite.bitmapToImageLiteral(pxt.sprite.Bitmap.fromData(tile.data), "typescript")
+                        editTileValue: pxt.sprite.bitmapToImageLiteral(pxt.sprite.Bitmap.fromData(tile.bitmap), "typescript")
                     });
                 }
                 else {

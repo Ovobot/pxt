@@ -15,49 +15,17 @@ interface KeymapData {
     map: { [key: string]: string[] };
 };
 
-const _data: { [key: string]: KeymapData[] } = {
-    "arcade": [ {
-            title: "player 1",
-            map: {
-                "up": ["↑", "W"],
-                "down": ["↓", "S"],
-                "left": ["→", "A"],
-                "right": ["←", "D"],
-                "a": ["Z", "space"],
-                "b": ["X", "enter"]
-            }
-        },
-        {
-            title: "player 2",
-            map: {
-                "up": ["I"],
-                "down": ["K"],
-                "left": ["J"],
-                "right": ["L"],
-                "a": ["U"],
-                "b": ["O"]
-            }
-        } ],
-    "xtronpro": [ {
-            title: "key map",
-            map: {
-                "up": ["↑", "W"],
-                "down": ["↓", "S"],
-                "left": ["→", "A"],
-                "right": ["←", "D"],
-                "a": ["Z", "space"],
-                "b": ["X", "enter"]
-            }
-        }]
-    }
+
 export class Keymap extends data.Component<ISettingsProps, KeymapState> {
+    private static _data: { [key: string]: KeymapData[] };
     private keymap: KeymapData[];
     constructor(props: ISettingsProps) {
         super(props);
 
+        this.setData();
         const board = pxt.appTarget && pxt.appTarget.appTheme
             && pxt.appTarget.appTheme.boardName.toLowerCase();
-        this.keymap = board && _data[board];
+        this.keymap = board && Keymap._data[board];
     }
 
     componentDidMount() {
@@ -92,5 +60,45 @@ export class Keymap extends data.Component<ISettingsProps, KeymapState> {
                 </div>
             })}
         </div>;
+    }
+
+    private setData() {
+        if (!Keymap._data) {
+            Keymap._data = {
+                "arcade": [ {
+                        title: "player 1",
+                        map: {
+                            "up": ["↑", "W"],
+                            "down": ["↓", "S"],
+                            "left": ["→", "A"],
+                            "right": ["←", "D"],
+                            "a": ["Z", "space"],
+                            "b": ["X", "enter"]
+                        }
+                    },
+                    {
+                        title: "player 2",
+                        map: {
+                            "up": ["I"],
+                            "down": ["K"],
+                            "left": ["J"],
+                            "right": ["L"],
+                            "a": ["U"],
+                            "b": ["O"]
+                        }
+                    } ],
+                "xtronpro": [ {
+                        title: "key map",
+                        map: {
+                            "up": ["↑", "W"],
+                            "down": ["↓", "S"],
+                            "left": ["→", "A"],
+                            "right": ["←", "D"],
+                            "a": ["Z", "space"],
+                            "b": ["X", "enter"]
+                        }
+                    }]
+                }
+            }
     }
 }

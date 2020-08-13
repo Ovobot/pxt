@@ -289,8 +289,12 @@ export function readJson(fn: string) {
     return JSON.parse(fs.readFileSync(fn, "utf8"))
 }
 
+export function readText(fn: string) {
+    return fs.readFileSync(fn, "utf8");
+}
+
 export function readPkgConfig(dir: string) {
-    pxt.debug("readPkgConfig in " + dir)
+    //pxt.debug("readPkgConfig in " + dir)
     const fn = path.join(dir, pxt.CONFIG_NAME)
     const js: pxt.PackageConfig = readJson(fn)
 

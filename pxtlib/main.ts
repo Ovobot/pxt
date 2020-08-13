@@ -58,6 +58,7 @@ namespace pxt {
             for (const apiName of Object.keys(byQName)) {
                 const sym = byQName[apiName]
                 const lastDot = apiName.lastIndexOf(".")
+                const pyQName = sym.pyQName;
                 // re-create the object - this will hint the JIT that these are objects of the same type
                 // and the same hidden class should be used
                 const newsym = byQName[apiName] = {
@@ -65,6 +66,8 @@ namespace pxt {
                     qName: apiName,
                     namespace: apiName.slice(0, lastDot < 0 ? 0 : lastDot),
                     name: apiName.slice(lastDot + 1),
+                    pyQName: pyQName,
+                    pyName: pyQName ? pyQName.slice(pyQName.lastIndexOf(".") + 1) : undefined,
                     fileName: "",
                     attributes: sym.attributes || ({} as any),
                     retType: sym.retType || "void",
@@ -103,8 +106,10 @@ namespace pxt {
     }
 
     export function setCompileSwitch(name: string, value: boolean) {
-        (savedSwitches as any)[name] = value
-        if (appTarget) {
+        if (/^csv-/.test(name)) {
+            pxt.setAppTargetVariant(name.replace(/^csv-*/, ""))
+        } else if (appTarget) {
+            (savedSwitches as any)[name] = value
             U.jsonCopyFrom(appTarget.compile.switches, savedSwitches)
             U.jsonCopyFrom(savedAppTarget.compile.switches, savedSwitches)
         }
@@ -114,8 +119,12 @@ namespace pxt {
         if (!names)
             return
         for (let s of names.split(/[\s,;:]+/)) {
-            if (s)
+            if (!s) continue
+            if (s[0] == "-") {
+                setCompileSwitch(s.slice(1), false)
+            } else {
                 setCompileSwitch(s, true)
+            }
         }
     }
 
@@ -167,8 +176,6 @@ namespace pxt {
         U.jsonCopyFrom(comp.switches, savedSwitches)
         // JS ref counting currently not supported
         comp.jsRefCounting = false
-        if (!comp.vtableShift)
-            comp.vtableShift = 2
         if (!comp.useUF2 && !comp.useELF && comp.noSourceInFlash == undefined)
             comp.noSourceInFlash = true // no point putting sources in hex to be flashed
         if (comp.utf8 === undefined)
@@ -211,14 +218,31 @@ namespace pxt {
         })
 
         // patch any pre-configured query url appTheme overrides
-        if (appTarget.queryVariants && typeof window !== 'undefined') {
+        if (typeof window !== 'undefined') {
+            // Map<AppTarget>
+            const queryVariants: Map<any> = {
+                "lockededitor=1": {
+                    appTheme: {
+                        lockedEditor: true
+                    }
+                },
+                "hidemenu=1": {
+                    appTheme: {
+                        hideMenuBar: true
+                    }
+                }
+            }
+            // import target specific flags
+            if (appTarget.queryVariants)
+                Util.jsonCopyFrom(queryVariants, appTarget.queryVariants);
+
             const href = window.location.href;
-            Object.keys(appTarget.queryVariants).forEach(queryRegex => {
+            Object.keys(queryVariants).forEach(queryRegex => {
                 const regex = new RegExp(queryRegex, "i");
                 const match = regex.exec(href);
                 if (match) {
                     // Apply any appTheme overrides
-                    let v = appTarget.queryVariants[queryRegex];
+                    let v = queryVariants[queryRegex];
                     if (v) {
                         U.jsonMergeFrom(appTarget, v);
                     }
@@ -227,9 +251,9 @@ namespace pxt {
         }
     }
 
-    export function reloadAppTargetVariant() {
+    export function reloadAppTargetVariant(temporary = false) {
         pxt.perf.measureStart("reloadAppTargetVariant")
-        const curr = JSON.stringify(appTarget);
+        const curr = temporary ? "" : JSON.stringify(appTarget);
         appTarget = U.clone(savedAppTarget)
         if (appTargetVariant) {
             const v = appTarget.variants && appTarget.variants[appTargetVariant];
@@ -240,17 +264,20 @@ namespace pxt {
         }
         patchAppTarget();
         // check if apptarget changed
-        if (onAppTargetChanged && curr != JSON.stringify(appTarget))
+        if (!temporary && onAppTargetChanged && curr != JSON.stringify(appTarget))
             onAppTargetChanged();
         pxt.perf.measureEnd("reloadAppTargetVariant")
     }
 
     // this is set by compileServiceVariant in pxt.json
-    export function setAppTargetVariant(variant: string, force?: boolean): void {
+    export function setAppTargetVariant(variant: string, opts: {
+        force?: boolean,
+        temporary?: boolean
+    } = {}): void {
         pxt.debug(`app variant: ${variant}`);
-        if (!force && (appTargetVariant === variant || (!appTargetVariant && !variant))) return;
+        if (!opts.force && (appTargetVariant === variant || (!appTargetVariant && !variant))) return;
         appTargetVariant = variant
-        reloadAppTargetVariant();
+        reloadAppTargetVariant(opts.temporary);
     }
 
     // notify when app target was changed
@@ -349,6 +376,7 @@ namespace pxt {
         workerjs: string;  // "/beta---worker",
         monacoworkerjs: string; // "/beta---monacoworker",
         gifworkerjs: string; // /beta---gifworker",
+        serviceworkerjs: string; // /beta---serviceworker
         pxtVersion: string; // "?",
         pxtRelId: string; // "9e298e8784f1a1d6787428ec491baf1f7a53e8fa",
         pxtCdnUrl: string; // "https://pxt.azureedge.net/commit/9e2...e8fa/",
@@ -360,9 +388,13 @@ namespace pxt {
         targetRelId: string; // "9e298e8784f1a1d6787428ec491baf1f7a53e8fa",
         targetId: string; // "microbit",
         simUrl: string; // "https://trg-microbit.userpxt.io/beta---simulator"
+        simserviceworkerUrl: string; // https://trg-microbit.userpxt.io/beta---simserviceworker
+        simworkerconfigUrl: string; // https://trg-microbit.userpxt.io/beta---simworkerconfig
         partsUrl?: string; // /beta---parts
         runUrl?: string; // "/beta---run"
         docsUrl?: string; // "/beta---docs"
+        multiUrl?: string; // "/beta---multi"
+        asseteditorUrl?: string; // "/beta---asseteditor"
         isStatic?: boolean;
         verprefix?: string; // "v1"
     }
@@ -373,6 +405,7 @@ namespace pxt {
             workerjs: "/worker.js",
             monacoworkerjs: "/monacoworker.js",
             gifworkerjs: "/gifjs/gif.worker.js",
+            serviceworkerjs: "/serviceworker.js",
             pxtVersion: "local",
             pxtRelId: "",
             pxtCdnUrl: "/cdn/",
@@ -384,6 +417,8 @@ namespace pxt {
             targetRelId: "",
             targetId: appTarget ? appTarget.id : "",
             simUrl: "/sim/simulator.html",
+            simserviceworkerUrl: "/simulatorserviceworker.js",
+            simworkerconfigUrl: "/sim/workerConfig.js",
             partsUrl: "/sim/siminstructions.html"
         }
         return r
@@ -458,10 +493,13 @@ namespace pxt {
     export const CONFIG_NAME = "pxt.json"
     export const SIMSTATE_JSON = ".simstate.json"
     export const SERIAL_EDITOR_FILE = "serial.txt"
+    export const README_FILE = "README.md"
+    export const GITIGNORE_FILE = ".gitignore"
     export const CLOUD_ID = "pxt/"
     export const BLOCKS_PROJECT_NAME = "blocksprj";
     export const JAVASCRIPT_PROJECT_NAME = "tsprj";
     export const PYTHON_PROJECT_NAME = "pyprj";
+    export const DEFAULT_GROUP_NAME = "other"; // used in flyout, for snippet groups
 
     export function outputName(trg: pxtc.CompileTarget = null) {
         if (!trg) trg = appTarget.compile

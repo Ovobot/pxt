@@ -283,7 +283,7 @@ namespace pxsim {
     }
 
     export class RefRefLocal extends RefObject {
-        v: any = null;
+        v: any = undefined;
 
         scan(mark: (path: string, v: any) => void) {
             mark("*", this.v)
@@ -319,6 +319,7 @@ namespace pxsim {
         gcSize() { return this.data.length * 2 + 4 }
 
         findIdx(key: string) {
+            key = key + "" // make sure it's a string
             for (let i = 0; i < this.data.length; ++i) {
                 if (this.data[i].key == key)
                     return i;

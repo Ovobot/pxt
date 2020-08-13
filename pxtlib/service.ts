@@ -14,6 +14,7 @@ namespace ts.pxtc {
     export const TS_BREAK_TYPE = "break_keyword";
     export const TS_CONTINUE_TYPE = "continue_keyword";
     export const TS_OUTPUT_TYPE = "typescript_expression";
+    export const TS_RETURN_STATEMENT_TYPE = "function_return";
     export const PAUSE_UNTIL_TYPE = "pxt_pause_until";
     export const COLLAPSED_BLOCK = "pxt_collapsed_block"
     export const FUNCTION_DEFINITION_TYPE = "function_definition";
@@ -67,6 +68,7 @@ namespace ts.pxtc {
         isMemberCompletion: boolean;
         isNewIdentifierLocation: boolean;
         isTypeLocation: boolean;
+        namespace: string[];
     }
 
     export interface LocationInfo {
@@ -98,6 +100,139 @@ namespace ts.pxtc {
         value: number;
     }
 
+    export type CodeLang = "py" | "blocks" | "ts"
+    export type PosSpan = {
+        startPos: number;
+        endPos: number;
+    }
+    export interface SourceInterval {
+        ts: PosSpan;
+        py: PosSpan;
+    }
+
+    export type LineColToPos = (line: number, col: number) => number
+    export type PosToLineCol = (pos: number) => [number, number]
+    export interface SourceMapHelpers {
+        ts: {
+            posToLineCol: PosToLineCol,
+            lineColToPos: LineColToPos,
+            allOverlaps: (i: PosSpan) => SourceInterval[],
+            smallestOverlap: (i: PosSpan) => SourceInterval | undefined
+            locToLoc: (thisLoc: pxtc.LocationInfo) => pxtc.LocationInfo,
+            getText: (i: PosSpan) => string,
+        },
+        py: {
+            posToLineCol: PosToLineCol,
+            lineColToPos: LineColToPos,
+            allOverlaps: (i: PosSpan) => SourceInterval[],
+            smallestOverlap: (i: PosSpan) => SourceInterval | undefined,
+            locToLoc: (thisLoc: pxtc.LocationInfo) => pxtc.LocationInfo,
+            getText: (i: PosSpan) => string,
+        },
+    }
+
+    export function BuildSourceMapHelpers(sourceMap: SourceInterval[], tsFile: string, pyFile: string): SourceMapHelpers {
+        // Notes:
+        //  lines are 0-indexed (Monaco they are 1-indexed)
+        //  columns are 0-indexed (0th is first character)
+        //  positions are 0-indexed, as if getting the index of a character in a file as a giant string (incl. new lines)
+        //  line summation is the length of that line plus its newline plus all the lines before it; aka the position of the next line's first character
+        //  end positions are zero-index but not inclusive, same behavior as substring
+        const makeLineColPosConverters = (file: string): { posToLineCol: PosToLineCol, lineColToPos: LineColToPos } => {
+            const lines = file.split("\n")
+            const lineLengths = lines
+                .map(l => l.length)
+            const lineLenSums = lineLengths
+                .reduce(({ lens, sum }, n) =>
+                    ({ lens: [...lens, sum + n + 1], sum: sum + n + 1 }),
+                    { lens: [] as number[], sum: 0 })
+                .lens
+            const lineColToPos = (line: number, col: number) => {
+                let pos = (lineLenSums[line - 1] || 0) + col
+                return pos
+            }
+            const posToLineCol = (pos: number) => {
+                const line = lineLenSums
+                    .reduce((curr, nextLen, i) => pos < nextLen ? curr : i + 1, 0)
+                const col = lineLengths[line] - (lineLenSums[line] - pos) + 1
+                return [line, col] as [number, number]
+            }
+            return { posToLineCol, lineColToPos }
+        }
+
+        const lcp = {
+            ts: makeLineColPosConverters(tsFile),
+            py: makeLineColPosConverters(pyFile)
+        }
+
+        const intLen = (i: PosSpan) => i.endPos - i.startPos
+        const allOverlaps = (i: PosSpan, lang: "ts" | "py") => {
+            const { startPos, endPos } = i
+            return sourceMap
+                .filter(i => {
+                    // O(n), can we and should we do better?
+                    return i[lang].startPos <= startPos && endPos <= i[lang].endPos
+                })
+        }
+        const smallestOverlap = (i: PosSpan, lang: "ts" | "py"): SourceInterval | undefined => {
+            const overlaps = allOverlaps(i, lang)
+            return overlaps.reduce((p, n) => intLen(n[lang]) < intLen(p[lang]) ? n : p, overlaps[0])
+        }
+
+        const os = {
+            ts: {
+                allOverlaps: (i: PosSpan) => allOverlaps(i, "ts"),
+                smallestOverlap: (i: PosSpan) => smallestOverlap(i, "ts"),
+            },
+            py: {
+                allOverlaps: (i: PosSpan) => allOverlaps(i, "py"),
+                smallestOverlap: (i: PosSpan) => smallestOverlap(i, "py"),
+            }
+        }
+
+        const makeLocToLoc = (inLang: "ts" | "py", outLang: "ts" | "py") => {
+            const inLocToPosAndLen = (inLoc: pxtc.LocationInfo) => [lcp[inLang].lineColToPos(inLoc.line, inLoc.column), inLoc.length] as [number, number]
+            const locToLoc = (inLoc: pxtc.LocationInfo): pxtc.LocationInfo | undefined => {
+                const [inStartPos, inLen] = inLocToPosAndLen(inLoc)
+                const inEndPos = inStartPos + inLen
+                const bestOverlap = smallestOverlap({ startPos: inStartPos, endPos: inEndPos }, inLang)
+                if (!bestOverlap)
+                    return undefined
+                const [outStartLine, outStartCol] = lcp[outLang].posToLineCol(bestOverlap[outLang].startPos)
+                const outLoc = {
+                    fileName: `main.${outLang}`,
+                    start: bestOverlap[outLang].startPos,
+                    length: intLen(bestOverlap[outLang]),
+                    line: outStartLine,
+                    column: outStartCol
+                }
+                return outLoc
+            }
+            return locToLoc
+        }
+
+        const tsLocToPyLoc = makeLocToLoc("ts", "py")
+        const pyLocToTsLoc = makeLocToLoc("py", "ts")
+
+        const tsGetText = (i: PosSpan) => tsFile.substring(i.startPos, i.endPos)
+        const pyGetText = (i: PosSpan) => pyFile.substring(i.startPos, i.endPos)
+
+        return {
+            ts: {
+                ...lcp.ts,
+                ...os.ts,
+                locToLoc: tsLocToPyLoc,
+                getText: tsGetText
+            },
+            py: {
+                ...lcp.py,
+                ...os.py,
+                locToLoc: pyLocToTsLoc,
+                getText: pyGetText
+            },
+        }
+    }
+
     export interface CompileResult {
         outfiles: pxt.Map<string>;
         diagnostics: KsDiagnostic[];
@@ -105,8 +240,10 @@ namespace ts.pxtc {
         times: pxt.Map<number>;
         //ast?: Program; // Not needed, moved to pxtcompiler
         breakpoints?: Breakpoint[];
+        procCallLocations?: pxtc.LocationInfo[];
         procDebugInfo?: ProcDebugInfo[];
         blocksInfo?: BlocksInfo;
+        blockSourceMap?: pxt.blocks.BlockSourceInterval[]; // mappings id,start,end
         usedSymbols?: pxt.Map<SymbolInfo>; // q-names of symbols used
         usedArguments?: pxt.Map<string[]>;
         needsFullRecompile?: boolean;
@@ -117,6 +254,8 @@ namespace ts.pxtc {
         headerId?: string;
         confirmAsync?: (confirmOptions: {}) => Promise<number>;
         configData?: ConfigEntry[];
+        sourceMap?: SourceInterval[];
+        globalNames?: pxt.Map<SymbolInfo>;
     }
 
     export interface Breakpoint extends LocationInfo {
@@ -544,8 +683,8 @@ namespace ts.pxtc {
 
     function cleanLocalizations(apis: ApisInfo) {
         Util.values(apis.byQName)
-        .filter(fb => fb.attributes.block && /^{[^:]+:[^}]+}/.test(fb.attributes.block))
-        .forEach(fn => { fn.attributes.block = fn.attributes.block.replace(/^{[^:]+:[^}]+}/, ''); });
+            .filter(fb => fb.attributes.block && /^{[^:]+:[^}]+}/.test(fb.attributes.block))
+            .forEach(fn => { fn.attributes.block = fn.attributes.block.replace(/^{[^:]+:[^}]+}/, ''); });
         return apis;
     }
 
@@ -1017,66 +1156,56 @@ namespace ts.pxtc {
         return !!((p as BlockPart).kind);
     }
 
-    // TODO should be internal
-    export namespace hex {
-        export function isSetupFor(extInfo: ExtensionInfo) {
-            return currentSetup == extInfo.sha
-        }
-
-        export let currentSetup: string = null;
-        export let currentHexInfo: pxtc.HexInfo;
-
-        export interface ChecksumBlock {
-            magic: number;
-            endMarkerPos: number;
-            endMarker: number;
-            regions: { start: number; length: number; checksum: number; }[];
-        }
-
-        export function parseChecksumBlock(buf: ArrayLike<number>, pos = 0): ChecksumBlock {
-            let magic = pxt.HF2.read32(buf, pos)
-            if ((magic & 0x7fffffff) != 0x07eeb07c) {
-                pxt.log("no checksum block magic")
-                return null
-            }
-            let endMarkerPos = pxt.HF2.read32(buf, pos + 4)
-            let endMarker = pxt.HF2.read32(buf, pos + 8)
-            if (endMarkerPos & 3) {
-                pxt.log("invalid end marker position")
-                return null
-            }
-            let pageSize = 1 << (endMarker & 0xff)
-            if (pageSize != pxt.appTarget.compile.flashCodeAlign) {
-                pxt.log("invalid page size: " + pageSize)
-                return null
-            }
-
-            let blk: ChecksumBlock = {
-                magic,
-                endMarkerPos,
-                endMarker,
-                regions: []
-            }
-
-            for (let i = pos + 12; i < buf.length - 7; i += 8) {
-                let r = {
-                    start: pageSize * pxt.HF2.read16(buf, i),
-                    length: pageSize * pxt.HF2.read16(buf, i + 2),
-                    checksum: pxt.HF2.read32(buf, i + 4)
-                }
-                if (r.length && r.checksum) {
-                    blk.regions.push(r)
-                } else {
-                    break
-                }
-            }
-
-            //console.log(hexDump(buf), blk)
-
-            return blk
-        }
-
+    export interface ChecksumBlock {
+        magic: number;
+        endMarkerPos: number;
+        endMarker: number;
+        regions: { start: number; length: number; checksum: number; }[];
     }
+
+    export function parseChecksumBlock(buf: ArrayLike<number>, pos = 0): ChecksumBlock {
+        let magic = pxt.HF2.read32(buf, pos)
+        if ((magic & 0x7fffffff) != 0x07eeb07c) {
+            pxt.log("no checksum block magic")
+            return null
+        }
+        let endMarkerPos = pxt.HF2.read32(buf, pos + 4)
+        let endMarker = pxt.HF2.read32(buf, pos + 8)
+        if (endMarkerPos & 3) {
+            pxt.log("invalid end marker position")
+            return null
+        }
+        let pageSize = 1 << (endMarker & 0xff)
+        if (pageSize != pxt.appTarget.compile.flashCodeAlign) {
+            pxt.log("invalid page size: " + pageSize)
+            return null
+        }
+
+        let blk: ChecksumBlock = {
+            magic,
+            endMarkerPos,
+            endMarker,
+            regions: []
+        }
+
+        for (let i = pos + 12; i < buf.length - 7; i += 8) {
+            let r = {
+                start: pageSize * pxt.HF2.read16(buf, i),
+                length: pageSize * pxt.HF2.read16(buf, i + 2),
+                checksum: pxt.HF2.read32(buf, i + 4)
+            }
+            if (r.length && r.checksum) {
+                blk.regions.push(r)
+            } else {
+                break
+            }
+        }
+
+        //console.log(hexDump(buf), blk)
+
+        return blk
+    }
+
 
     export namespace UF2 {
         export const UF2_MAGIC_START0 = 0x0A324655; // "UF2\n"
@@ -1343,6 +1472,9 @@ namespace ts.pxtc {
                     setWord(currBlock, 20, f.blocks.length)
                     setWord(currBlock, 28, f.familyId)
                     setWord(currBlock, 512 - 4, UF2_MAGIC_END)
+                    // if bytes are not written, leave them at erase value
+                    for (let i = 32; i < 32 + 256; ++i)
+                        currBlock[i] = 0xff
                     if (f.filename) {
                         U.memcpy(currBlock, 32 + 256, U.stringToUint8Array(U.toUTF8(f.filename)))
                     }
@@ -1390,6 +1522,8 @@ namespace ts.pxtc.service {
         fileContent?: string;
         infoType?: InfoType;
         position?: number;
+        wordStartPos?: number;
+        wordEndPos?: number;
         options?: CompileOptions;
         search?: SearchOptions;
         format?: FormatOptions;
@@ -1426,6 +1560,7 @@ namespace ts.pxtc.service {
         field?: [string, string];
         localizedCategory?: string;
         builtinBlock?: boolean;
+        params?: string;
     }
 
     export interface ProjectSearchOptions {

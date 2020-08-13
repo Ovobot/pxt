@@ -257,21 +257,59 @@ The **sig** "language" displays a signature of the first function call in the sn
 **Example:** the [forever](https://makecode.microbit.org/reference/basic/forever) reference doc
 and it's [markdown](https://github.com/Microsoft/pxt-microbit/blob/master/docs/reference/basic/forever.md) source.
 
+### diff
+
+Render a diff between two JavaScript snippets. The snippet consists of two text section separated by a line of ``-`` (at least 10).
+
+    ```diff
+    let x = 1
+    ----------
+    let x = 1
+    let y = 1
+    ```
+
+### ~ hint
+
+#### Trailing semicolons
+
+Avoid using trailing ``;`` in your JavaScript snippets.
+
+### ~
+
+### diffblocks
+
+Render a diff of blocks between two JavaScript snippets. The snippet consists of two text section separated by a line of ``-`` (at least 10).
+
+    ```diffblocks
+    let x = 1
+    ----------
+    let x = 1
+    let y = 1
+    ```
+
+### ~ hint
+
+#### Ghost snippet
+
+You can use the [ghost](#ghost) code section to provide actual code of a step that show only a gif instead of code.
+
+### ~
+
 ### cards
 
 The **cards** "language" displays a code card for each function call.
 
     ```cards
-    basic.showNumber(0);
+    basic.showNumber(0)
     basic.showLeds(`
     . . . . .
     . . . . .
     . . # . .
     . . . . .
     . . . . .
-    `);
-    basic.showString("Hello!");
-    basic.clearScreen();
+    `)
+    basic.showString("Hello!")
+    basic.clearScreen()
     ```
 
 **Example:** the [basic](https://makecode.micorbit.org/reference/basic) reference doc
@@ -282,8 +320,8 @@ and it's [markdown](https://github.com/Microsoft/pxt-microbit/blob/master/docs/r
 The **namespaces** "language" displays a code card for the first symbol of each namespace.
 
     ```namespaces
-    basic.showNumber(0);
-    input.onButtonPressed(() => {});
+    basic.showNumber(0)
+    input.onButtonPressed(() => {})
     ```
 
 **Example:** the [reference](https://makecode.microbit.org/reference) namespaces doc
@@ -302,8 +340,17 @@ The **block** "language" renders a JavaScript snippet into blocks without any si
 If you need a rendering of typescript, javascript code, specify the language as ``typescript``.
 
     ```typescript
-    let x = 0;
+    let x = 0
     ```
+
+#### ~ hint
+
+In tutorial, MakeCode can render a diff between each typescrit or spy snippets.
+To reset the diff on a step, use the ``@resetDiff`` metadata. 
+
+Use ``### @diffs true/false`` to enable/disable diffs for the entire tutorial
+
+#### ~
 
 ### spy
 
@@ -311,7 +358,7 @@ If your editor supports [Static Python](/js/python), you can specify a TypeScrip
 using the ``spy`` macro.
 
     ```spy
-    let x = 0;
+    let x = 0
     ```
 
 ### ghost
@@ -319,7 +366,7 @@ using the ``spy`` macro.
 The **ghost** "language" causes addtional blocks to appear in the Toolbox during a tutorial step. This is used to provide additional block choices other than those matching the code snippet in a **blocks** section. The **ghost** blocks don't render but serve to identify other blocks to add to the Toolbox choices.
 
     ```ghost
-    let x = 0;
+    let x = 0
     ```
 
 
@@ -328,7 +375,7 @@ The **ghost** "language" causes addtional blocks to appear in the Toolbox during
 The **template** "language" is used to specify the initial code that appears in the workspace at the start of a tutorial. If there is no **template** block present in the tutorial, the default "new project" code will be used.
 
     ```template
-    let x = 0;
+    let x = 0
     ```
 
 ### codecard
@@ -343,6 +390,14 @@ To render one or more code cards as JSON into cards, use **codecard**.
         "title": "Another card",
         "url": "...."
     }]
+    ```
+
+### apis
+
+Render all blocks from a given set of namespaces as code cards.
+
+    ```apis
+    basic
     ```
 
 ### ignore #ignore
@@ -371,5 +426,24 @@ You can use `typescript-valid` to showcase typescript that is **correct**:
 
     ```typescript-valid
     // You can include any TS in here, e.g. to showcase correct syntax
-    callFunction();
+    callFunction()
     ```
+
+### highlight
+
+The render will higlight the next line or block following a 
+comment with **@highlight**.
+
+    ```blocks
+    console.log(":)")
+    // @highlight
+    console.log(":(")
+    ```
+
+### autoOpen
+
+To disable auto-opening the README file in MakeCode, add
+
+```
+### @autoOpen false
+```
