@@ -1107,7 +1107,6 @@ function uploadCoreAsync(opts: UploadOptions) {
         "simworkerconfigUrl": opts.localDir + "workerConfig.js",
         "multiUrl": opts.localDir + "multi.html",
         "asseteditorUrl": opts.localDir + "asseteditor.html",
-        "isStatic": true
     }
 
     let replacements: Map<string> = {
@@ -1157,7 +1156,7 @@ function uploadCoreAsync(opts: UploadOptions) {
             "simworkerconfigUrl": opts.localDir + "workerConfig.js",
             "multiUrl": opts.localDir + "multi.html",
             "asseteditorUrl": opts.localDir + "asseteditor.html",
-            "isStatic": true,
+            // "isStatic": true,
         }
         const targetImagePaths = targetImages.map(k =>
             `${opts.localDir}${path.join('./docs', logos[k])}`);
