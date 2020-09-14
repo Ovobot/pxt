@@ -17,7 +17,7 @@ function init() {
 
 export class AssetEditor extends React.Component {
     render() {
-        return <ImageFieldEditor singleFrame={true} options={null} />
+        return <ImageFieldEditor singleFrame={true} />
     }
 }
 

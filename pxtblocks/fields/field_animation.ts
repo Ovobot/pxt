@@ -7,7 +7,7 @@ namespace pxtblockly {
     export interface FieldAnimationOptions {
         initWidth: string;
         initHeight: string;
-        data:any[][];
+
         filter?: string;
     }
 
@@ -15,8 +15,6 @@ namespace pxtblockly {
         initWidth: number;
         initHeight: number;
         filter?: string;
-        data:any[][];
-        editorFrames:any[];
     }
 
     // 32 is specifically chosen so that we can scale the images for the default
@@ -49,19 +47,11 @@ namespace pxtblockly {
             super(text, validator);
 
             this.lightMode = params.lightMode;
-
             this.params = parseFieldOptions(params);
-
             this.blocksInfo = params.blocksInfo;
-
-            if (!this.state) {
-                let anif = pxt.Util.htmlUnescape(this.params.data[0][0].frame);
-                this.doValueUpdate_(anif);
-            }
 
             this.initState();
         }
-
 
         init() {
             if (this.fieldGroup_) {
@@ -146,24 +136,14 @@ namespace pxtblockly {
             if (newValue == null) {
                 return;
             }
-            
             this.value_ = newValue;
-            
+
+
             const frames = parseImageArrayString(newValue);
+
             if (frames && frames.length) {
                 this.initState();
                 this.state.frames = frames;
-                let tmpFrames = [];
-                for(let i in this.params.data){
-                    
-                    let anif = pxt.Util.htmlUnescape(this.params.data[i][0].frame);
-
-                    const af = parseImageArrayString(anif);
-                    tmpFrames.push(af);
-                    
-                    //console.log(i+": "+this.params.data[i])
-                }
-                this.params.editorFrames = tmpFrames;
             }
 
             this.redrawPreview();
@@ -264,13 +244,13 @@ namespace pxtblockly {
                 if (this.params) {
                     this.state = {
                         frames: [new pxt.sprite.Bitmap(this.params.initWidth, this.params.initHeight).data()],
-                        interval: 100,
+                        interval: 100
                     }
                 }
                 else {
                     this.state = {
                         frames: [],
-                        interval: 100,
+                        interval: 100
                     }
                 }
             }
@@ -281,8 +261,6 @@ namespace pxtblockly {
         const parsed: ParsedFieldAnimationOptions = {
             initWidth: 16,
             initHeight: 16,
-            data:[],
-            editorFrames:[],
         };
 
         if (!opts) {
@@ -295,14 +273,7 @@ namespace pxtblockly {
 
         parsed.initWidth = withDefault(opts.initWidth, parsed.initWidth);
         parsed.initHeight = withDefault(opts.initHeight, parsed.initHeight);
-        parsed.data = opts.data;
-        let tmpFrames = [];
-        for(let i in opts.data){
-            let anif = pxt.Util.htmlUnescape(opts.data[i][0].frame);
-            const af = parseImageArrayString(anif);
-            tmpFrames.push(af);
-        }
-        parsed.editorFrames = tmpFrames;
+
         return parsed;
 
         function withDefault(raw: string, def: number) {

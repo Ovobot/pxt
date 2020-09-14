@@ -4,7 +4,6 @@ import { Provider, Store } from 'react-redux';
 import { mainStore, tileEditorStore } from './store/imageStore'
 import { SideBar } from './SideBar';
 import { BottomBar } from './BottomBar';
-
 import { TopBar } from './TopBar';
 import { ImageCanvas } from './ImageCanvas';
 import { Alert, AlertInfo } from './Alert';
@@ -12,7 +11,7 @@ import { Alert, AlertInfo } from './Alert';
 import { Timeline } from './Timeline';
 import { addKeyListener, removeKeyListener, setStore } from './keyboardShortcuts';
 
-import { dispatchChangeMainFrames,dispatchSetInitialState, dispatchImageEdit, dispatchChangeZoom, dispatchSetInitialFrames, dispatchSetInitialTilemap, dispatchCloseTileEditor, dispatchDisableResize } from './actions/dispatch';
+import { dispatchSetInitialState, dispatchImageEdit, dispatchChangeZoom, dispatchSetInitialFrames, dispatchSetInitialTilemap, dispatchCloseTileEditor, dispatchDisableResize } from './actions/dispatch';
 import { EditorState, AnimationState, TilemapState, GalleryTile, ImageEditorStore } from './store/imageReducer';
 import { imageStateToBitmap, imageStateToTilemap, applyBitmapData } from './util';
 import { Unsubscribe, Action } from 'redux';
@@ -24,7 +23,6 @@ export interface ImageEditorSaveState {
 
 export interface ImageEditorProps {
     singleFrame?: boolean;
-    options?:any;
     onChange?: (value: string) => void;
     initialValue?: string;
     resizeDisabled?: boolean;
@@ -73,8 +71,7 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
     }
 
     render(): JSX.Element {
-        const { singleFrame,options} = this.props;
-        
+        const { singleFrame } = this.props;
         const instanceStore = this.getStore();
 
         const { editTileValue, editingTile, alert } = this.state;
@@ -102,7 +99,7 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
         this.dispatchOnStore(dispatchSetInitialFrames([{ bitmap: value.data() }], 100))
     }
 
-    initAnimation(frames: pxt.sprite.Bitmap[], interval: number, index: number) {
+    initAnimation(frames: pxt.sprite.Bitmap[], interval: number) {
         this.dispatchOnStore(dispatchSetInitialFrames(frames.map(frame => ({ bitmap: frame.data() })), interval));
     }
 
@@ -125,8 +122,6 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
     getAnimation(): pxt.sprite.AnimationData {
         const state = this.getStore().getState();
         const animationState = state.store.present as AnimationState;
-        const {options} = this.props;
-
         return {
             interval: animationState.interval,
             frames: animationState.frames.map(frame => imageStateToBitmap(frame).data())
@@ -164,9 +159,6 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
         this.dispatchOnStore(dispatchImageEdit({ bitmap: bitmap.data() }))
     }
 
-    setCurrentMainFrame(frames: pxt.sprite.ImageState[]){
-        this.dispatchOnStore(dispatchChangeMainFrames(frames, 100));
-    }
     disableResize() {
         this.dispatchOnStore(dispatchDisableResize());
     }

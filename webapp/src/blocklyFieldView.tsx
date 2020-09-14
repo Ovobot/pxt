@@ -193,10 +193,10 @@ export function init() {
 
         switch (fieldEditorId) {
             case "image-editor":
-                current.injectElement(<ImageFieldEditor ref={ refHandler } singleFrame={true} options = {options}/>);
+                current.injectElement(<ImageFieldEditor ref={ refHandler } singleFrame={true} />);
                 break;
             case "animation-editor":
-                current.injectElement(<ImageFieldEditor ref={ refHandler } singleFrame={false} options = {options}/>);
+                current.injectElement(<ImageFieldEditor ref={ refHandler } singleFrame={false} />);
                 break;
 
             case "tilemap-editor":
