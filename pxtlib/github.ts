@@ -146,9 +146,8 @@ namespace pxt.github {
     }
 
     function ghProxyWithCdnJsonAsync(path: string) {
-        return Cloud.apiRequestWithCdnAsync({
-            url: "gh/" + path,
-            forceLiveEndpoint: true
+        return Cloud.gitApiRequestWithCdnAsync({
+            url: "gh/" + path
         }).then(r => r.json);
     }
 
@@ -508,7 +507,7 @@ namespace pxt.github {
         const fetch = !proxy ?
             ghGetJsonAsync(`https://api.github.com/repos/${repopath}/git/refs/${namespace}/?per_page=100`) :
             // no CDN caching here, bust browser cace
-            U.httpGetJsonAsync(pxt.BrowserUtils.cacheBustingUrl(`${pxt.Cloud.apiRoot}gh/${repopath}/refs${noCache ? "?nocache=1" : ""}`))
+            U.httpGetJsonAsync(pxt.BrowserUtils.cacheBustingUrl(`${pxt.Cloud.gitApiRoot}gh/${repopath}/refs${noCache ? "?nocache=1" : ""}`))
                 .then(r => {
                     let res = Object.keys(r.refs)
                         .filter(k => U.startsWith(k, "refs/" + namespace + "/"))

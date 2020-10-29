@@ -74,7 +74,8 @@ namespace pxt.Cloud {
     }
     
     export function privateGitRequestAsync(options: Util.HttpRequestOptions) {
-        options.url = pxt.webConfig && pxt.webConfig.isStatic && !options.forceLiveEndpoint ? pxt.webConfig.relprefix + options.url : gitApiRoot + options.url;
+        //pxt.webConfig && pxt.webConfig.isStatic && !options.forceLiveEndpoint ? pxt.webConfig.relprefix + options.url : 
+        options.url = gitApiRoot + options.url;
         options.allowGzipPost = true
         if (!Cloud.isOnline()) {
             return offlineError(options.url);
@@ -91,11 +92,11 @@ namespace pxt.Cloud {
     }
 
     export function gitApiRequestWithCdnAsync(options: Util.HttpRequestOptions) {
-        if (!useCdnApi())
+        // if (!useCdnApi())
             return privateGitRequestAsync(options)
-        options.url = cdnApiUrl(options.url)
-        return Util.requestAsync(options)
-            .catch(e => handleNetworkError(options, e))
+        // options.url = cdnApiUrl(options.url)
+        // return Util.requestAsync(options)
+        //     .catch(e => handleNetworkError(options, e))
     }
 
     export function privateRequestAsync(options: Util.HttpRequestOptions) {
