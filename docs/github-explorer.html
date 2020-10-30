@@ -8,8 +8,17 @@
         href="https://pxt.azureedge.net/blob/2163189fd5e35c0981ed55318415582a7c9aeb12/doccdn/semantic.css"
         type="text/css">
     <style>
-        @targetstyle@ nav.ui.menu {
-            font-size: 0.8rem;
+        @targetstyle@ label,
+        nav.ui.menu {
+            font-size: 0.8rem !important;
+        }
+
+        #signin {
+            margin-left: calc(50% - 10rem);
+            margin-top: 10rem;
+            width: 20rem;
+            text-align: center;
+            margin-right: calc(50% - 10rem);
         }
 
         #user {
@@ -62,66 +71,89 @@
         .ui.selection.list>.item.active {
             border: solid 2px grey;
         }
+        .ui.selection.list>.item>.content {
+            width:18rem;
+        }
+        .ui.selection.list>.item:not(.active) .extra  {
+            display: none;
+        }
+
     </style>
     <script type="text/javascript"
         src="https://pxt.azureedge.net/blob/4d9b3a258759c53e7bc66b6fc554c51e2434437c/doccdn/jquery.js"></script>
     <script type="text/javascript"
         src="https://pxt.azureedge.net/blob/fc2f56f46189a2e8be3743a1a5abed3b676f9318/doccdn/semantic.js"></script>
     <script>
+(async function () {        
         const api = "https://api.github.com";
 
-        const targets = {
-            "ev3": {
-                name: "LEGO® MINDSTORMS® Education EV3",
-                url: "https://makecode.mindstorms.com/beta"
-            },
-            "arcade": {
-                name: "Arcade",
-                url: "https://arcade.makecode.com/beta"
-            },
-            "microbit": {
-                name: "micro:bit",
-                url: "https://makecode.microbit.org/beta"
-            },
-            "adafruit": {
-                name: "Adafruit Circuit Playground Express",
-                url: "https://makecode.adafruit.com/beta",
-                icon: "https://pxt.azureedge.net/blob/1215b9ef46d3e04bc9923a1a333d92db92eb5419/static/logo.square.black.svg"
-            },
-            "minecraft": {
-                name: "Minecraft",
-                url: "https://minecraft.makecode.com/beta"
-            },
-            "maker": {
-                name: "Maker",
-                url: "https://maker.makecode.com"
-            },
-            "calliopemini": {
-                name: "Calliope Mini",
-                url: "https://makecode.calliope.cc/beta"
-            }
+        const targets = await fetchJSON("/editors.json");
+
+        async function fetchJSON(url) {
+            const resp = await fetch(url)
+            const json = await resp.json();
+            return json;
         }
 
         function trackClick(id) {
             if (typeof mscc !== "undefined" && !mscc.hasConsent())
                 mscc.setConsent();
-            pxt.aiTrackEvent(id);
+            if (typeof pxt !== "undefined")
+                pxt.aiTrackEvent(id);
         }
 
-        async function sniffTarget(repo) {
-            const response = await fetch(`https://raw.githubusercontent.com/${repo.full_name}/master/README.md?token=${token()}`);
-            const msg = await response.text();
-            return Object.keys(targets)
-                .find(k => msg.indexOf(`PXT/${k}`) > -1)
+        async function fetchGraphQL(query) {
+            const response = await fetch("https://api.github.com/graphql", {
+                method: 'POST', // *GET, POST, PUT, DELETE, etc.
+                mode: 'cors', // no-cors, *cors, same-origin
+                headers: {
+                    "Authorization": "bearer " + token()
+                },
+                body: JSON.stringify({ query: query })
+            });
+            if (response.status == 401) {
+                console.log('token expired...')
+                navigateSignout();
+            }
+            return response;
+        }        
+
+        function sniffTarget(repo) {
+            try {
+                const pxtJson = JSON.parse(repo.object.text);
+                return pxtJson.supportedTargets && pxtJson.supportedTargets[0];
+            } catch(e) {
+                return undefined;
+            }
         }
 
         async function fetchUserRepos(user) {
-            const query = `user:${user} in:name,description,readme "for PXT/"`;
-            const url = `${api}/search/repositories?q=${encodeURIComponent(query)}&sort=updated&access_token=${token()}&anti_cache=${Math.random()}`;
-            const response = await fetch(url);
-            const { items } = await response.json();
+            const query = `
+            {
+  user(login:"${user}") {
+    repositories(first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {
+      nodes {
+        name
+        owner {
+            login
+        }
+        nameWithOwner
+        object(expression: "master:pxt.json") {
+          ... on Blob {
+            text
+          }
+        }
+      }
+    }
+  }
+}
+`;
+            const response = await fetchGraphQL(query);
+            const responseJSON = await response.json();
+            const items = responseJSON.data.user.repositories.nodes
+                .filter(node => node.object)
             for (let i = 0; i < items.length; ++i) {
-                const target = await sniffTarget(items[i]);
+                const target = sniffTarget(items[i]);
                 if (!target)
                     items[i] = undefined;
                 else
@@ -131,19 +163,38 @@
         }
 
         async function fetchUser(user) {
-            const response = await fetch(`${api}/users/${user}?access_token=${token()}`);
+            if (!token()) return undefined;
+            const response = await fetchGraphQL(`{
+  user(login:"${user}") {
+    name
+    login
+    avatarUrl
+  }
+}`);
             if (response.status != 200)
                 return undefined;
             const msg = await response.json();
-            return msg;
+            return msg && msg.data && msg.data.user;
         }
 
-        async function update() {
+        async function fetchCurrentUser() {
+            if (!token()) return undefined;
+            const response = await fetchGraphQL(`{
+  viewer {
+      login
+  }
+}`);
+            const msg = await response.json();
+            return msg && msg.data && msg.data.viewer && msg.data.viewer.login;
+        }
+
+        async function update(userName) {
             $('#userparent').addClass('loading');
             try {
                 $("#repoes")
                     .empty();
-                const userName = $("#user").val();
+                $("#makecodecolumn").attr("src", "");
+
                 const user = await fetchUser(userName);
                 if (!user) {
                     $('#repoes').append(`<div class="ui item">
@@ -151,18 +202,25 @@
                     </div>`)
                     return;
                 }
-                $('#repoes')
-                    .append(`<a href="https://github.com/${user.login}" target="_blank" class="ui link item" title="Open user profile">
-                    <div class="ui mini image">
-      <img src="${user.avatar_url}">
+                const userEl = $(`
+<a href="" target="_blank" class="ui link item" title="Open user profile">
+    <div class="ui mini image">
+      <img src="">
     </div>
     <div class="content">
-        <div class="header">${user.name}</div>
-        <div class="description">${user.login}</div>
+        <div class="header"></div>
+        <div class="description"></div>
     </div>
 </a>`)
+                userEl.attr("href", `https://github.com/${user.login}`)
+                userEl.find("img").attr('src', user.avatarUrl)
+                userEl.find(".header").text(user.name)
+                userEl.find(".description").text(user.login)
+                $('#repoes')
+                    .append(userEl)
                 const repoes = await fetchUserRepos(userName);
                 $("#repoes")
+                    .append(`<div class="ui divider"></div>`)
                     .append(
                         repoes.map(repo => {
                             const target = targets[repo.target];
@@ -170,22 +228,30 @@
                             const item = $(
                                 `<div class="ui link item">
     <div class="ui mini image">
-      <img src="${icon}">
+        <img src="">
     </div>
     <div class="content">
-        <div class="header">${repo.name.replace(/^pxt-/, '')}</div>
-        <div class="description">${target.name}</div>
+        <div class="header"></div>
+        <div class="description"></a></div>
+        <div class="extra"><button class="ui right floated button icon" title="Open repository in GitHub.com"><i class="icon external"></i></button></div>        
     </div>
 </div>`);
+                            item.find("img").attr("src", icon)
+                            item.find(".header").text(repo.name)
+                            item.find(".description").text(repo.owner.login)
+                            item.find(".extra>button").click(event => {
+                                event.stopPropagation();
+                                window.open(targets[repo.target].url, "_blank")
+                            })
                             item.click(event => {
                                 trackClick("github.explorer.open")
                                 $('#repoes').children().removeClass('active');
                                 item.addClass('active');
+                                const readOnly = !$('#edit').is(':checked');
+
                                 const url = targets[repo.target].url +
-                                    "?controller=1&readonly=1&ws=mem&nocookiebanner=1" +
-                                    "#pub:" +
-                                    "https://github.com/" +
-                                    repo.full_name
+                                    `?nocookiebanner=1&${readOnly ? 'controller=1&readonly=1&ws=mem&' : 'editorLayout=ide&nosandbox=1'}#pub:github:`
+                                    + repo.nameWithOwner + "#master";
                                 $("#makecodecolumn").attr("src", url);
                             })
 
@@ -220,10 +286,14 @@
                 $("#signin").show();
                 $('#signout').hide();
                 $('#userparent').hide();
+                $('#repocolumn').hide();
+                $('#makecodecolumn').hide();
             } else {
                 $("#signin").hide();
                 $('#signout').show();
                 $('#userparent').show();
+                $('#repocolumn').show();
+                $('#makecodecolumn').show();
             }
         }
 
@@ -247,31 +317,53 @@
         $(function () {
             console.log(`loaded...`);
             checkToken();
-            $("#generate").click(update);
             $('#signinbtn').click(navigateSignin)
             $('#signout').click(navigateSignout);
             $("#user").on("keydown", function search(e) {
                 if (e.keyCode == 13) {
                     trackClick("github.explorer.search")
-                    update();
+                    const userName = $("#user").val();
+                    update(userName);
                 }
             });
+            $('#edit').change(function () {
+                trackClick("github.explorer.edit")
+                const userName = $("#user").val();
+                update(userName);
+            })
+
+            console.log("starting...");
+            if (typeof pxt !== "undefined")
+                pxt.aiTrackEvent("github.explorer.loaded")
+
+            fetchCurrentUser()
+                .then(user => {
+                    if (user) {
+                        $("#user").val(user);
+                        update(user);
+                    }
+                })
 
         });
-
-        console.log("starting...");
-        pxt.aiTrackEvent("github.explorer.loaded")
+})();
     </script>
 </head>
 
 <body id='root' class='root'>
-    <nav class="ui menu inverted fixed borderless">
+    <nav class="ui menu fixed borderless">
         <div class="menu left">
             <div class="ui item">
                 MakeCode GitHub Explorer
             </div>
         </div>
         <div class="menu right">
+            <!--
+            <div class="ui item">
+                <div class="ui toggle checkbox">
+                    <input type="checkbox" name="edit" id="edit">
+                    <label id="editlabel">Edit</label>
+                </div>
+            </div>-->
             <a href="https://forum.makecode.com" target="_blank" class="ui item">
                 Forum
             </a>
@@ -284,27 +376,27 @@
         </div>
     </nav>
     <div id="repocolumn">
-        <div id="signin">
-            <p>
-                Sign in to access your MakeCode repositories.
-            </p>
-            <button id="signinbtn" class="ui icon button">
-                <i class="ui github icon"></i>
-                Sign in
-            </button>
-        </div>
         <div id="userparent" class="ui left icon input">
             <input id="user" class="ui fluid" type="text" placeholder="Enter GitHub user" />
             <i class="search icon"></i>
         </div>
-        <div id="repoes" class="ui selection list"></div>
+        <div id="repoes" class="ui selection aligned list"></div>
     </div>
     <iframe id="makecodecolumn"></iframe>
+    <div id="signin">
+        <p>
+            Sign in to access your MakeCode repositories.
+        </p>
+        <button id="signinbtn" class="ui icon basic button">
+            <i class="ui github icon"></i>
+            Sign in
+        </button>
+    </div>
     <footer id="footer" class="hideprint">
         <a class="item" href="https://makecode.com/privacy" target="_blank" rel="noopener">Privacy &amp; Cookies</a>
         <a class="item" href="https://makecode.com/termsofuse" target="_blank" rel="noopener"> Terms Of Use</a>
         <a class="item" href="https://makecode.com/trademarks" target="_blank" rel="noopener">Trademarks</a>
-        <div class="item">© 2019 Microsoft</div>
+        <div class="item">© 2020 Microsoft</div>
     </footer>
     <script type="text/javascript"
         src="https://pxt.azureedge.net/blob/795d8506c80a04f5ca26f577a8d6152e2fa3e7a6/doccdn/pxtweb.js"></script>

@@ -14,6 +14,8 @@ namespace pxtblockly {
         initWidth: string;
         initHeight: string;
 
+        disableResize: string;
+
         filter?: string;
     }
 
@@ -21,16 +23,19 @@ namespace pxtblockly {
         initColor: number;
         initWidth: number;
         initHeight: number;
+        disableResize: boolean;
         filter?: string;
     }
 
     // 32 is specifically chosen so that we can scale the images for the default
     // sprite sizes without getting browser anti-aliasing
     const PREVIEW_WIDTH = 32;
-    const PADDING = 5;
+    const X_PADDING = 5;
+    const Y_PADDING = 1;
     const BG_PADDING = 4;
     const BG_WIDTH = BG_PADDING * 2 + PREVIEW_WIDTH;
-    const TOTAL_WIDTH = PADDING * 2 + BG_PADDING * 2 + PREVIEW_WIDTH;
+    const TOTAL_HEIGHT = Y_PADDING * 2 + BG_PADDING * 2 + PREVIEW_WIDTH;
+    const TOTAL_WIDTH = X_PADDING * 2 + BG_PADDING * 2 + PREVIEW_WIDTH;
 
     export class FieldSpriteEditor extends Blockly.Field implements Blockly.FieldCustom {
         public isFieldCustom_ = true;
@@ -60,7 +65,7 @@ namespace pxtblockly {
                 return;
             }
             // Build the DOM.
-            this.fieldGroup_ = Blockly.utils.dom.createSvgElement('g', {}, null);
+            this.fieldGroup_ = Blockly.utils.dom.createSvgElement('g', {}, null) as SVGGElement;
             if (!this.visible_) {
                 (this.fieldGroup_ as any).style.display = 'none';
             }
@@ -110,7 +115,7 @@ namespace pxtblockly {
 
         render_() {
             super.render_();
-            this.size_.height = TOTAL_WIDTH
+            this.size_.height = TOTAL_HEIGHT;
             this.size_.width = TOTAL_WIDTH;
         }
 
@@ -134,9 +139,9 @@ namespace pxtblockly {
             pxsim.U.clear(this.fieldGroup_);
 
             const bg = new svg.Rect()
-                .at(PADDING, PADDING)
+                .at(X_PADDING, Y_PADDING)
                 .size(BG_WIDTH, BG_WIDTH)
-                .fill("#dedede")
+                .setClass("blocklySpriteField")
                 .stroke("#898989", 1)
                 .corner(4);
 
@@ -146,7 +151,7 @@ namespace pxtblockly {
                 const data = bitmapToImageURI(this.state, PREVIEW_WIDTH, this.lightMode);
                 const img = new svg.Image()
                     .src(data)
-                    .at(PADDING + BG_PADDING, PADDING + BG_PADDING)
+                    .at(X_PADDING + BG_PADDING, Y_PADDING + BG_PADDING)
                     .size(PREVIEW_WIDTH, PREVIEW_WIDTH);
                 this.fieldGroup_.appendChild(img.el);
             }
@@ -167,6 +172,7 @@ namespace pxtblockly {
             initColor: 1,
             initWidth: 16,
             initHeight: 16,
+            disableResize: false,
         };
 
         if (!opts) {
@@ -205,6 +211,10 @@ namespace pxtblockly {
 
         if (opts.filter) {
             parsed.filter = opts.filter;
+        }
+
+        if (opts.disableResize) {
+            parsed.disableResize = opts.disableResize.toLowerCase() === "true" || opts.disableResize === "1";
         }
 
         parsed.initColor = withDefault(opts.initColor, parsed.initColor);

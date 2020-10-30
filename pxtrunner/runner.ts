@@ -4,7 +4,6 @@
 /// <reference path="../built/pxteditor.d.ts" />
 /// <reference path="../built/pxtcompiler.d.ts" />
 /// <reference path="../built/pxtblocks.d.ts" />
-/// <reference path="../built/pxteditor.d.ts" />
 /// <reference path="../built/pxtsim.d.ts" />
 
 namespace pxt.runner {
@@ -61,7 +60,7 @@ namespace pxt.runner {
         }
 
         getHexInfoAsync(extInfo: pxtc.ExtensionInfo): Promise<pxtc.HexInfo> {
-            return pxt.hex.getHexInfoAsync(this, extInfo)
+            return pxt.hexloader.getHexInfoAsync(this, extInfo)
         }
 
         cacheStoreAsync(id: string, val: string): Promise<void> {
@@ -451,8 +450,10 @@ namespace pxt.runner {
             const options = (msg.options || {}) as pxt.blocks.BlocksRenderOptions;
             options.splitSvg = false; // don't split when requesting rendered images
             pxt.tickEvent("renderer.job")
+            const isXml = /^\s*<xml/.test(msg.code);
+
             jobPromise = pxt.BrowserUtils.loadBlocklyAsync()
-                .then(() => runner.decompileToBlocksAsync(msg.code, msg.options))
+                .then(() => isXml ? pxt.runner.compileBlocksAsync(msg.code, options) : runner.decompileSnippetAsync(msg.code, msg.options))
                 .then(result => {
                     const blocksSvg = result.blocksSvg as SVGSVGElement;
                     return blocksSvg ? pxt.blocks.layout.blocklyToSvgAsync(blocksSvg, 0, 0, blocksSvg.viewBox.baseVal.width, blocksSvg.viewBox.baseVal.height) : undefined;
@@ -783,18 +784,40 @@ ${linkString}
 </aside>
 
 <aside id=hint class=box>
-    <div class="ui icon green message">
+    <div class="ui info message">
         <div class="content">
-            <div class="header">Hint</div>
             @BODY@
         </div>
     </div>
 </aside>
 
 <aside id=tutorialhint class=box>
-    <div class="ui icon orange message" data-inferred>
+    <div class="ui hint message">
         <div class="content">
-            <div class="header">Tutorial Hint</div>
+            @BODY@
+        </div>
+    </div>
+</aside>
+
+<aside id=reminder class=box>
+    <div class="ui warning message">
+        <div class="content">
+            @BODY@
+        </div>
+    </div>
+</aside>
+
+<aside id=alert class=box>
+    <div class="ui negative message">
+        <div class="content">
+            @BODY@
+        </div>
+    </div>
+</aside>
+
+<aside id=tip class=box>
+    <div class="ui positive message">
+        <div class="content">
             @BODY@
         </div>
     </div>
@@ -838,28 +861,10 @@ ${linkString}
             || window.innerHeight < window.innerWidth ? 1.62 : 1 / 1.62;
         $(content).html(html);
         $(content).find('a').attr('target', '_blank');
-        const renderOptions: ClientRenderOptions = {
-            blocksAspectRatio: blocksAspectRatio,
-            snippetClass: 'lang-blocks',
-            signatureClass: 'lang-sig',
-            blocksClass: 'lang-block',
-            blocksXmlClass: 'lang-blocksxml',
-            diffBlocksXmlClass: 'lang-diffblocksxml',
-            staticPythonClass: 'lang-spy',
-            simulatorClass: 'lang-sim',
-            linksClass: 'lang-cards',
-            namespacesClass: 'lang-namespaces',
-            codeCardClass: 'lang-codecard',
-            packageClass: 'lang-package',
-            projectClass: 'lang-project',
-            snippetReplaceParent: true,
-            simulator: true,
-            showEdit: true,
-            hex: true,
-            tutorial: !!options.tutorial,
-            showJavaScript: editorLanguageMode == LanguageMode.TypeScript,
-            hexName: pxt.appTarget.id
-        }
+        const renderOptions = pxt.runner.defaultClientRenderOptions();
+        renderOptions.tutorial = !!options.tutorial;
+        renderOptions.blocksAspectRatio = blocksAspectRatio || renderOptions.blocksAspectRatio;
+        renderOptions.showJavaScript = editorLanguageMode == LanguageMode.TypeScript;
         if (options.print) {
             renderOptions.showEdit = false;
             renderOptions.simulator = false;
@@ -886,8 +891,9 @@ ${linkString}
     }
 
     let programCache: ts.Program;
+    let apiCache: pxt.Map<pxtc.ApisInfo>;
 
-    export function decompileToBlocksAsync(code: string, options?: blocks.BlocksRenderOptions): Promise<DecompileResult> {
+    export function decompileSnippetAsync(code: string, options?: blocks.BlocksRenderOptions): Promise<DecompileResult> {
         // code may be undefined or empty!!!
         const packageid = options && options.packageId ? "pub:" + options.packageId :
             options && options.package ? "docs:" + options.package
@@ -910,13 +916,14 @@ ${linkString}
                 }
                 programCache = program;
 
+                // decompile to python
                 let compilePython: pxtc.transpile.TranspileResult = undefined;
                 if (pxt.appTarget.appTheme.python) {
                     compilePython = ts.pxtc.transpile.tsToPy(program, "main.ts");
                 }
 
                 // decompile to blocks
-                let apis = pxtc.getApiInfo(program, opts.jres);
+                let apis = getApiInfo(program, opts);
                 return ts.pxtc.localizeApisAsync(apis, mainPkg)
                     .then(() => {
                         let blocksInfo = pxtc.getBlocksInfo(apis);
@@ -924,7 +931,10 @@ ${linkString}
                         let bresp = pxtc.decompiler.decompileToBlocks(
                             blocksInfo,
                             program.getSourceFile("main.ts"),
-                            { snippetMode: options && options.snippetMode });
+                            {
+                                snippetMode: options && options.snippetMode,
+                                generateSourceMap: options && options.generateSourceMap
+                            });
                         if (bresp.diagnostics && bresp.diagnostics.length > 0)
                             bresp.diagnostics.forEach(diag => console.error(diag.messageText));
                         if (!bresp.success)
@@ -950,6 +960,16 @@ ${linkString}
             });
     }
 
+    function getApiInfo(program: ts.Program, opts: pxtc.CompileOptions) {
+        if (!apiCache) apiCache = {};
+
+        const key = Object.keys(opts.fileSystem).sort().join(";");
+
+        if (!apiCache[key]) apiCache[key] = pxtc.getApiInfo(program, opts.jres);
+
+        return apiCache[key];
+    }
+
     export function compileBlocksAsync(code: string, options?: blocks.BlocksRenderOptions): Promise<DecompileResult> {
         const packageid = options && options.packageId ? "pub:" + options.packageId :
             options && options.package ? "docs:" + options.package
@@ -959,7 +979,7 @@ ${linkString}
             .then(opts => {
                 opts.ast = true
                 const resp = pxtc.compile(opts)
-                const apis = pxtc.getApiInfo(resp.ast, opts.jres);
+                const apis = getApiInfo(resp.ast, opts);
                 return ts.pxtc.localizeApisAsync(apis, mainPkg)
                     .then(() => {
                         const blocksInfo = pxtc.getBlocksInfo(apis);

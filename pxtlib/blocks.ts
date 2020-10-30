@@ -99,9 +99,6 @@ namespace pxt.blocks {
         // remove spaces before after pipe
         nb = nb.replace(/\s*\|\s*/g, '|');
 
-        // lower case first character
-        nb = nb.replace(/^[A-Z]/, (m) => m.toLowerCase());
-
         return nb;
     }
 
@@ -137,12 +134,19 @@ namespace pxt.blocks {
             const def = refMap[THIS_NAME] || defParameters[0];
             const defName = def.name;
             const isVar = !def.shadowBlockId || def.shadowBlockId === "variables_get";
+
+            let defaultValue: string;
+
+            if (isVar) {
+                defaultValue = def.varName || fn.attributes.paramDefl[defName] || fn.attributes.paramDefl["this"];
+            }
+
             res.thisParameter = {
                 actualName: THIS_NAME,
                 definitionName: defName,
                 shadowBlockId: def.shadowBlockId,
                 type: fn.namespace,
-                defaultValue: isVar ? def.varName : undefined,
+                defaultValue: defaultValue,
 
                 // Normally we pass ths actual parameter name, but the "this" parameter doesn't have one
                 fieldEditor: fieldEditor(defName, THIS_NAME),
@@ -220,6 +224,15 @@ namespace pxt.blocks {
             return fn.attributes.paramShadowOptions &&
                 (fn.attributes.paramShadowOptions[defName] || fn.attributes.paramShadowOptions[actualName]);
         }
+    }
+
+    export function hasHandler(fn: pxtc.SymbolInfo) {
+        return fn.parameters && fn.parameters.some(p => (
+            p.type == "() => void" ||
+            p.type == "Action" ||
+            !!p.properties?.length ||
+            !!p.handlerParameters?.length
+        ));
     }
 
     /**
@@ -671,6 +684,16 @@ namespace pxt.blocks {
                     PROCEDURES_CALLNORETURN_TITLE: Util.lf("call function")
                 }
             },
+            'function_return': {
+                name: Util.lf("return a value from within a function"),
+                tooltip: Util.lf("Return a value from within a user-defined function."),
+                url: 'types/function/return',
+                category: 'functions',
+                block: {
+                    message_with_value: Util.lf("return %1"),
+                    message_no_value: Util.lf("return")
+                }
+            },
             'function_definition': {
                 name: Util.lf("define the function"),
                 tooltip: Util.lf("Create a function."),
@@ -687,6 +710,14 @@ namespace pxt.blocks {
                 category: 'functions',
                 block: {
                     FUNCTIONS_CALL_TITLE: Util.lf("call")
+                }
+            },
+            'function_call_output': {
+                name: Util.lf("call the function with a return value"),
+                tooltip: Util.lf("Call the user-defined function with a return value."),
+                url: 'types/function/call',
+                category: 'functions',
+                block: {
                 }
             }
         };
