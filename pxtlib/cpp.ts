@@ -1296,8 +1296,8 @@ namespace pxt.hexloader {
             // return (cdnUrlPromise = Cloud.privateGetAsync("clientconfig", forceLive)
             //     .then(r => r.primaryCdnUrl));
             
-            return (cdnUrlPromise = Promise.resolve("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com"))
-            //return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
+            // return (cdnUrlPromise = Promise.resolve("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com"))
+            return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
         }
     }
 
@@ -1319,7 +1319,7 @@ namespace pxt.hexloader {
                         return U.httpGetTextAsync(hexurl + ".hex")
                     })
                     .then(r => r, e =>
-                        Cloud.privatePostAsync("compile/extension", { data: extInfo.compileData })
+                        Cloud.msCloudPostAsync("compile/extension", { data: extInfo.compileData })
                             .then(ret => new Promise<string>((resolve, reject) => {
                                 let tryGet = () => {
                                     let url = ret.hex.replace(/\.hex/, ".json")
@@ -1334,6 +1334,7 @@ namespace pxt.hexloader {
                                                 resolve(null);
                                             }
                                             else {
+                                                // hexurl = "https://makecode.trafficmanager.cn" + "/compile/" + extInfo.sha
                                                 pxt.log("fetching " + hexurl + ".hex")
                                                 resolve(U.httpGetTextAsync(hexurl + ".hex"))
                                             }
