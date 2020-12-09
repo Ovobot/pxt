@@ -11,60 +11,60 @@
       "unicode": "EDC6"
     },
     {
-      "name": "ClosedCaption",
-      "unicode": "EF84"
+      "name": "ArrowUpRightMirrored8",
+      "unicode": "EEEF"
     },
     {
-      "name": "MyMoviesTV",
-      "unicode": "EE6C"
+      "name": "ClosedCaption",
+      "unicode": "EF84"
     },
     {
       "name": "SingleBookmark",
       "unicode": "EDFF"
     },
     {
-      "name": "ArrowUpRightMirrored8",
-      "unicode": "EEEF"
-    },
-    {
-      "name": "Code",
-      "unicode": "E943"
-    },
-    {
-      "name": "Robot",
-      "unicode": "E99A"
-    },
-    {
-      "name": "OpenFile",
-      "unicode": "E8E5"
-    },
-    {
-      "name": "ChromeClose",
-      "unicode": "E8BB"
-    },
-    {
-      "name": "Timer",
-      "unicode": "E91E"
+      "name": "MyMoviesTV",
+      "unicode": "EE6C"
     },
     {
       "name": "BrowserScreenShot",
       "unicode": "EBED"
     },
     {
-      "name": "Record2",
-      "unicode": "EA3F"
+      "name": "Code",
+      "unicode": "E943"
+    },
+    {
+      "name": "Timer",
+      "unicode": "E91E"
+    },
+    {
+      "name": "Robot",
+      "unicode": "E99A"
+    },
+    {
+      "name": "ChromeClose",
+      "unicode": "E8BB"
+    },
+    {
+      "name": "OpenPane",
+      "unicode": "E8A0"
+    },
+    {
+      "name": "OpenFile",
+      "unicode": "E8E5"
     },
     {
       "name": "OpenPaneMirrored",
       "unicode": "EA5B"
     },
     {
-      "name": "EditCreate",
-      "unicode": "F3C9"
+      "name": "Record2",
+      "unicode": "EA3F"
     },
     {
-      "name": "WhiteBoardApp32",
-      "unicode": "F674"
+      "name": "EditCreate",
+      "unicode": "F3C9"
     },
     {
       "name": "CircleShapeSolid",
@@ -75,12 +75,16 @@
       "unicode": "F522"
     },
     {
+      "name": "DoubleColumn",
+      "unicode": "F1D4"
+    },
+    {
       "name": "RectangleShape",
       "unicode": "F1A9"
     },
     {
-      "name": "DoubleColumn",
-      "unicode": "F1D4"
+      "name": "FullView",
+      "unicode": "F1A2"
     },
     {
       "name": "CircleShape",
@@ -93,6 +97,26 @@
     {
       "name": "ArrowTallUpLeft",
       "unicode": "F2BD"
+    },
+    {
+      "name": "Reset",
+      "unicode": "E423"
+    },
+    {
+      "name": "Contact",
+      "unicode": "E77B"
+    },
+    {
+      "name": "Highlight",
+      "unicode": "E7E6"
+    },
+    {
+      "name": "Stop",
+      "unicode": "E71A"
+    },
+    {
+      "name": "Video",
+      "unicode": "E714"
     },
     {
       "name": "ChevronDown",
@@ -111,36 +135,20 @@
       "unicode": "E713"
     },
     {
-      "name": "Video",
-      "unicode": "E714"
-    },
-    {
-      "name": "Highlight",
-      "unicode": "E7E6"
-    },
-    {
-      "name": "OpenPane",
-      "unicode": "E8A0"
-    },
-    {
-      "name": "Remove",
-      "unicode": "E738"
-    },
-    {
-      "name": "Stop",
-      "unicode": "E71A"
+      "name": "EraseTool",
+      "unicode": "E75C"
     },
     {
       "name": "Save",
       "unicode": "E74E"
     },
     {
-      "name": "Contact",
-      "unicode": "E77B"
+      "name": "Remove",
+      "unicode": "E738"
     },
     {
-      "name": "EraseTool",
-      "unicode": "E75C"
+      "name": "WhiteBoardApp32",
+      "unicode": "F674"
     },
     {
       "name": "OfficeChat",

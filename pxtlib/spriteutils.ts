@@ -187,6 +187,20 @@ namespace pxt.sprite {
         deletedTiles: string[];
 
         constructor(public tilemap: Tilemap, public tileset: TileSet, public layers: BitmapData) {}
+
+        cloneData() {
+            const tm = this.tilemap.copy();
+            const tileset: TileSet = {
+                tileWidth: this.tileset.tileWidth,
+                tiles: this.tileset.tiles.map(t => ({
+                    ...t,
+                    bitmap: Bitmap.fromData(t.bitmap).copy().data()
+                }))
+            }
+            const layers = Bitmap.fromData(this.layers).copy().data();
+
+            return new TilemapData(tm, tileset, layers);
+        }
     }
 
     export class Bitmask {
@@ -292,22 +306,25 @@ namespace pxt.sprite {
         return;
     }
 
-    export function computeAverageColor(bitmap: Bitmap, colors: string[]) {
+    export function computeAverageColor(bitmap: Bitmap, colors: string[]): string {
         const parsedColors = colors.map(colorStringToRGB);
-        let color: number[];
         const averageColor = [0, 0, 0];
+        let numPixels = 0;
 
         for (let x = 0; x < bitmap.width; x++) {
             for (let y = 0; y < bitmap.height; y++) {
-                color = parsedColors[bitmap.get(x, y)];
-                averageColor[0] += color[0];
-                averageColor[1] += color[1];
-                averageColor[2] += color[2];
+                const color = bitmap.get(x, y);
+                if (color) {
+                    ++numPixels;
+                    const parsedColor = parsedColors[color];
+                    averageColor[0] += parsedColor[0];
+                    averageColor[1] += parsedColor[1];
+                    averageColor[2] += parsedColor[2];
+                }
             }
         }
 
-        const numPixels = bitmap.width * bitmap.height;
-        return "#" + toHex(averageColor.map(c => Math.floor(c / numPixels)));
+        return !!numPixels ? "#" + toHex(averageColor.map(c => Math.floor(c / numPixels))) : "#00000000";
     }
 
     export interface GalleryItem {
@@ -598,7 +615,7 @@ namespace pxt.sprite {
         return result;
     }
 
-    export function bitmapToImageLiteral(bitmap: Bitmap, fileType: "typescript" | "python"): string {
+    function imageLiteralPrologue(fileType: "typescript" | "python"): string {
         let res = '';
         switch (fileType) {
             case "python":
@@ -608,18 +625,11 @@ namespace pxt.sprite {
                 res = "img`";
                 break;
         }
+        return res;
+    }
 
-        if (bitmap) {
-            for (let r = 0; r < bitmap.height; r++) {
-                res += "\n"
-                for (let c = 0; c < bitmap.width; c++) {
-                    res += hexChars[bitmap.get(c, r)] + " ";
-                }
-            }
-        }
-
-        res += "\n";
-
+    function imageLiteralEpilogue(fileType: "typescript" | "python"): string {
+        let res = '';
         switch (fileType) {
             case "python":
                 res += "\"\"\")";
@@ -628,6 +638,42 @@ namespace pxt.sprite {
                 res += "`";
                 break;
         }
+        return res;
+    }
+
+    export function imageLiteralFromDimensions(width: number, height: number, color: number, fileType: "typescript" | "python"): string {
+        let res = imageLiteralPrologue(fileType);
+        const paddingBetweenPixels = (width * height > 300) ? "" : " ";
+
+        for (let r = 0; r < height; r++) {
+            res += "\n"
+            for (let c = 0; c < width; c++) {
+                res += hexChars[color] + paddingBetweenPixels;
+            }
+        }
+
+        res += "\n";
+        res += imageLiteralEpilogue(fileType);
+
+        return res;
+    }
+
+    export function bitmapToImageLiteral(bitmap: Bitmap, fileType: "typescript" | "python"): string {
+        let res = imageLiteralPrologue(fileType);
+
+        if (bitmap) {
+            const paddingBetweenPixels = (bitmap.width * bitmap.height > 300) ? "" : " ";
+
+            for (let r = 0; r < bitmap.height; r++) {
+                res += "\n"
+                for (let c = 0; c < bitmap.width; c++) {
+                    res += hexChars[bitmap.get(c, r)] + paddingBetweenPixels;
+                }
+            }
+        }
+
+        res += "\n";
+        res += imageLiteralEpilogue(fileType);
 
         return res;
     }

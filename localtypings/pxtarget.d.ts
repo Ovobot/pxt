@@ -20,6 +20,7 @@ declare namespace pxt {
     }
     interface TargetConfig {
         packages?: PackagesConfig;
+        shareLinks?: ShareConfig;
         // common galleries
         galleries?: pxt.Map<string | GalleryProps>;
         // localized galleries
@@ -41,6 +42,10 @@ declare namespace pxt {
         // "acme-corp/pxt-widget": "min:v0.1.2" - auto-upgrade to that version
         // "acme-corp/pxt-widget": "dv:foo,bar" - add "disablesVariant": ["foo", "bar"] to pxt.json
         upgrades?: pxt.Map<string>;
+    }
+
+    interface ShareConfig {
+        approved?: string[];
     }
 
     interface AppTarget {
@@ -886,10 +891,11 @@ declare namespace pxt.tutorial {
         title?: string;
         steps: TutorialStepInfo[];
         activities: TutorialActivityInfo[];
-        code: string; // all code
+        code: string[]; // all code
         language?: string; // language of code snippet (ts or python)
         templateCode?: string;
         metadata?: TutorialMetadata;
+        jres?: string; // JRES to be used when generating hints; necessary for tilemaps
     }
 
     interface TutorialMetadata {
@@ -931,12 +937,13 @@ declare namespace pxt.tutorial {
         tutorialHintCounter?: number // count for number of times hint has been shown
         tutorialStepExpanded?: boolean; // display full step in dialog
         tutorialMd?: string; // full tutorial markdown
-        tutorialCode?: string; // all tutorial code bundled
+        tutorialCode?: string[]; // all tutorial code bundled
         tutorialRecipe?: boolean; // micro tutorial running within the context of a script
         templateCode?: string;
         autoexpandStep?: boolean; // autoexpand tutorial card if instruction text overflows
         metadata?: TutorialMetadata; // metadata about the tutorial parsed from the markdown
         language?: string; // native language of snippets ("python" for python, otherwise defaults to typescript)
+        jres?: string; // JRES to be used when generating hints; necessary for tilemaps
     }
     interface TutorialCompletionInfo {
         // id of the tutorial

@@ -429,11 +429,12 @@ export class EditorSelector extends data.Component<IEditorSelectorProps, {}> {
         const pyOnly = languageRestriction === pxt.editor.LanguageRestriction.PythonOnly;
         // show python in toggle if: python editor currently active, or blocks editor active & saved language pref is python
         const showPython = parent.isPythonActive() || (parent.isBlocksActive() && pxt.Util.isPyLangPref());
+        const showBlocks = !!pkg.mainEditorPkg().files["main.blocks"];
 
         return (
             <div id="editortoggle" className={`ui grid padded ${(pyOnly || tsOnly) ? "one-language" : ""}`}>
                 {sandbox && !headless && <SandboxMenuItem parent={parent} />}
-                {!pyOnly && !tsOnly && <BlocksMenuItem parent={parent} />}
+                {!pyOnly && !tsOnly && showBlocks && <BlocksMenuItem parent={parent} />}
                 {python && showPython ? <PythonMenuItem parent={parent} /> : <JavascriptMenuItem parent={parent} />}
                 {!pyOnly && !tsOnly && python && <sui.DropdownMenu id="editordropdown" role="menuitem" icon="chevron down" rightIcon title={lf("Select code editor language")} className={`item button attached right ${dropdownActive ? "active" : ""}`}>
                     <JavascriptMenuItem parent={parent} />
@@ -490,9 +491,9 @@ export class MainMenu extends data.Component<ISettingsProps, {}> {
     }
 
     exitTutorial() {
-        pxt.tickEvent("menu.exitTutorial", undefined, { interactiveConsent: true });
-        if (this.props.parent.state.tutorialOptions
-            && this.props.parent.state.tutorialOptions.tutorialRecipe)
+        const tutorialOptions = this.props.parent.state.tutorialOptions;
+        pxt.tickEvent("menu.exitTutorial", { tutorial: tutorialOptions?.tutorial }, { interactiveConsent: true });
+        if (tutorialOptions?.tutorialRecipe)
             this.props.parent.completeTutorialAsync().done();
         else
             this.props.parent.exitTutorial();
@@ -651,6 +652,10 @@ export class SideDocs extends data.Component<SideDocsProps, SideDocsState> {
 
     private setUrl(url: string) {
         this.props.parent.setState({ sideDocsLoadUrl: url, sideDocsCollapsed: false });
+    }
+
+    expand() {
+        this.props.parent.setState({ sideDocsCollapsed: false });
     }
 
     collapse() {
