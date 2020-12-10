@@ -84,14 +84,14 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
                     <TopBar singleFrame={singleFrame} />
                     <div className="image-editor-content">
                         <SideBar />
-                        <ImageCanvas />
+                        <ImageCanvas suppressShortcuts={editingTile} />
                         {isAnimationEditor && !singleFrame ? <Timeline /> : undefined}
                     </div>
                     <BottomBar singleFrame={singleFrame} onDoneClick={this.onDoneClick} />
                     {alert && alert.title && <Alert title={alert.title} text={alert.text} options={alert.options} />}
                 </div>
             </Provider>
-            {editingTile && <ImageEditor store={tileEditorStore} onDoneClicked={this.onTileEditorFinished} initialValue={editTileValue} singleFrame={true} resizeDisabled={true} nested={true} />}
+            {editingTile && <ImageEditor store={tileEditorStore} ref="nested-image-editor" onDoneClicked={this.onTileEditorFinished} initialValue={editTileValue} singleFrame={true} resizeDisabled={true} nested={true} />}
         </div>
     }
 
@@ -161,6 +161,12 @@ export class ImageEditor extends React.Component<ImageEditorProps, ImageEditorSt
 
     disableResize() {
         this.dispatchOnStore(dispatchDisableResize());
+    }
+
+    closeNestedEditor() {
+        if (this.state.editingTile) {
+            (this.refs["nested-image-editor"] as ImageEditor)?.onDoneClick();
+        }
     }
 
     protected getStore() {

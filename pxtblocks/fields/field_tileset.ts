@@ -13,6 +13,9 @@ namespace pxtblockly {
     const PREVIEW_SIDE_LENGTH = 32;
 
     export class FieldTileset extends FieldImages implements Blockly.FieldCustom {
+        // private member of FieldDropdown
+        protected selectedOption_: TilesetDropdownOption;
+
         protected static referencedTiles: TilesetDropdownOption[];
         protected static cachedRevision: number;
         protected static cachedWorkspaceId: string;
@@ -25,13 +28,19 @@ namespace pxtblockly {
                 FieldTileset.cachedWorkspaceId = workspace.id;
                 const references = getAllReferencedTiles(workspace);
 
-                const projectTiles = project.getProjectTiles(16)
+                const supportedTileWidths = [16, 8, 32];
 
-                for (const tile of projectTiles.tiles) {
-                    if (!references.find(t => t.id === tile.id)) {
-                        references.push(tile);
+                for (const width of supportedTileWidths) {
+                    const projectTiles = project.getProjectTiles(width, width === 16);
+                    if (!projectTiles) continue;
+
+                    for (const tile of projectTiles.tiles) {
+                        if (!references.find(t => t.id === tile.id)) {
+                            references.push(tile);
+                        }
                     }
                 }
+
 
                 let weights: pxt.Map<number> = {};
                 references.sort((a, b) => {
@@ -51,7 +60,7 @@ namespace pxtblockly {
                 });
 
                 const getTileImage = (t: pxt.Tile) => tileWeight(t.id) <= 2 ?
-                    mkTransparentTileImage(16) :
+                    mkTransparentTileImage(t.bitmap.width) :
                     bitmapToImageURI(pxt.sprite.Bitmap.fromData(t.bitmap), PREVIEW_SIDE_LENGTH, false);
 
                 FieldTileset.referencedTiles = references.map(tile => [{
@@ -102,6 +111,26 @@ namespace pxtblockly {
                 return v;
             }
             return super.getText();
+        }
+
+        render_() {
+            if (this.value_ && this.selectedOption_) {
+                if (this.selectedOption_[1] !== this.value_) {
+                    const tile = pxt.react.getTilemapProject().resolveTile(this.value_);
+                    FieldTileset.cachedRevision = -1;
+
+                    if (tile) {
+                        this.selectedOption_ = [{
+                            src: bitmapToImageURI(pxt.sprite.Bitmap.fromData(tile.bitmap), PREVIEW_SIDE_LENGTH, false),
+                            width: PREVIEW_SIDE_LENGTH,
+                            height: PREVIEW_SIDE_LENGTH,
+                            alt: tile.id
+                        }, this.value_]
+                    }
+                }
+
+            }
+            super.render_();
         }
 
         getOptions(): any[] {
@@ -158,10 +187,11 @@ namespace pxtblockly {
 
     function tileWeight(id: string) {
         switch (id) {
-            case "myTiles.transparency8":
             case "myTiles.transparency16":
-            case "myTiles.transparency32":
                 return 1;
+            case "myTiles.transparency8":
+            case "myTiles.transparency32":
+                return 2;
             default:
                 if (id.startsWith("myTiles.tile")) {
                     const num = parseInt(id.slice(12));

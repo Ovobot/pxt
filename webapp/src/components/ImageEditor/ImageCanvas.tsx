@@ -1,15 +1,17 @@
 import * as React from 'react';
 import { connect } from 'react-redux';
 
-import { ImageEditorStore, ImageEditorTool, AnimationState, TilemapState, TileDrawingMode } from './store/imageReducer';
+import { ImageEditorStore, ImageEditorTool, AnimationState, TilemapState, TileDrawingMode, GalleryTile } from './store/imageReducer';
 import {
     dispatchImageEdit, dispatchChangeZoom, dispatchChangeCursorLocation,
-    dispatchChangeImageTool, dispatchChangeSelectedColor, dispatchChangeBackgroundColor
+    dispatchChangeImageTool, dispatchChangeSelectedColor, dispatchChangeBackgroundColor,
+    dispatchCreateNewTile
 } from "./actions/dispatch";
-import { GestureTarget, ClientCoordinates, bindGestureEvents } from './util';
+import { GestureTarget, ClientCoordinates, bindGestureEvents, TilemapPatch, createTilemapPatchFromFloatingLayer } from './util';
 
 import { Edit, EditState, getEdit, getEditState, ToolCursor, tools } from './toolDefinitions';
 
+const IMAGE_MIME_TYPE = "image/x-mkcd-f4"
 
 export interface ImageCanvasProps {
     dispatchImageEdit: (state: pxt.sprite.ImageState) => void;
@@ -18,6 +20,7 @@ export interface ImageCanvasProps {
     dispatchChangeImageTool: (tool: ImageEditorTool) => void;
     dispatchChangeSelectedColor: (index: number) => void;
     dispatchChangeBackgroundColor: (index: number) => void;
+    dispatchCreateNewTile: (bitmap: pxt.sprite.BitmapData, foreground: number, background: number, qualifiedName?: string) => void;
     selectedColor: number;
     backgroundColor: number;
     tool: ImageEditorTool;
@@ -27,11 +30,14 @@ export interface ImageCanvasProps {
     isTilemap: boolean;
     drawingMode: TileDrawingMode;
     overlayEnabled?: boolean;
+    gallery?: GalleryTile[];
 
     colors: string[];
     tilemapState?: TilemapState;
     imageState?: pxt.sprite.ImageState;
     prevFrame?: pxt.sprite.ImageState;
+
+    suppressShortcuts: boolean;
 }
 
 /**
@@ -242,7 +248,36 @@ class ImageCanvasImpl extends React.Component<ImageCanvasProps, {}> implements G
     }
 
     protected onKeyDown = (ev: KeyboardEvent): void => {
-        this.hasInteracted = true
+        this.hasInteracted = true;
+
+        if (this.shouldHandleCanvasShortcut() && this.editState?.floating?.image) {
+            let moved = false;
+
+            switch (ev.key) {
+                case 'ArrowLeft':
+                    this.editState.layerOffsetX = Math.max(this.editState.layerOffsetX - 1, -this.editState.floating.image.width);
+                    moved = true;
+                    break;
+                case 'ArrowUp':
+                    this.editState.layerOffsetY = Math.max(this.editState.layerOffsetY - 1, -this.editState.floating.image.height);
+                    moved = true;
+                    break;
+                case 'ArrowRight':
+                    this.editState.layerOffsetX = Math.min(this.editState.layerOffsetX + 1, this.editState.width);
+                    moved = true;
+                    break;
+                case 'ArrowDown':
+                    this.editState.layerOffsetY = Math.min(this.editState.layerOffsetY + 1, this.editState.height);
+                    moved = true;
+                    break;
+            }
+
+            if (moved) {
+                this.props.dispatchImageEdit(this.editState.toImageState());
+                ev.preventDefault();
+            }
+        }
+
         if (!ev.repeat) {
             // prevent blockly's ctrl+c / ctrl+v handler
             if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'c' || ev.key === 'v')) {
@@ -292,21 +327,38 @@ class ImageCanvasImpl extends React.Component<ImageCanvasProps, {}> implements G
     }
 
     protected onCopy = (ev: ClipboardEvent) => {
-        if (this.props.isTilemap) {
-            return;
-        }
-
         if (this.props.tool === ImageEditorTool.Marquee && this.editState?.floating?.image) {
             ev.preventDefault();
 
-            const imageData = pxt.sprite.bitmapToImageLiteral(this.editState.floating.image, 'typescript');
-            ev.clipboardData.setData('application/makecode-image', imageData);
-            ev.clipboardData.setData('text/plain', imageData);
+            if (this.props.isTilemap) {
+                ev.clipboardData.setData('application/makecode-tilemap', JSON.stringify(createTilemapPatchFromFloatingLayer(this.editState, this.props.tilemapState.tileset)));
+            }
+            else {
+                const imageData = pxt.sprite.bitmapToImageLiteral(this.editState.floating.image, 'typescript');
+                ev.clipboardData.setData('application/makecode-image', imageData);
+                ev.clipboardData.setData('text/plain', imageData);
+            }
         }
     }
 
     protected onPaste = (ev: ClipboardEvent) => {
         if (this.props.isTilemap) {
+            const patchData = ev.clipboardData.getData('application/makecode-tilemap');
+
+            let tilemapPatch: TilemapPatch;
+
+            try {
+                tilemapPatch = JSON.parse(patchData);
+            }
+            catch (e) {
+            }
+
+            if (!tilemapPatch || !tilemapPatch.map || !tilemapPatch.layers || !tilemapPatch.tiles) {
+                return;
+            }
+
+            ev.preventDefault();
+            this.applyTilemapPatch(tilemapPatch);
             return;
         }
 
@@ -625,11 +677,13 @@ class ImageCanvasImpl extends React.Component<ImageCanvasProps, {}> implements G
     }
 
     protected drawCursor(left: number, top: number, width: number, color: number) {
-        const context = this.canvas.getContext("2d");
+        const isDrawingWalls = this.props.isTilemap && this.props.drawingMode === TileDrawingMode.Wall;
+        const canvas = isDrawingWalls ? this.canvasLayers[0] : this.canvas;
+        const context = canvas.getContext("2d");
         context.imageSmoothingEnabled = false;
 
         if (color) {
-            if (this.props.isTilemap && this.props.drawingMode != TileDrawingMode.Wall) {
+            if (this.props.isTilemap && !isDrawingWalls) {
                 if (color >= this.props.tilemapState.tileset.tiles.length) return;
 
                 let tileImage = this.tileCache[color];
@@ -653,8 +707,7 @@ class ImageCanvasImpl extends React.Component<ImageCanvasProps, {}> implements G
                 context.fillStyle = this.props.colors[color]
                 context.fillRect(left * this.cellWidth, top * this.cellWidth, width * this.cellWidth, width * this.cellWidth);
             }
-        }
-        else {
+        } else {
             context.clearRect(left * this.cellWidth, top * this.cellWidth, width * this.cellWidth, width * this.cellWidth);
         }
     }
@@ -839,7 +892,7 @@ class ImageCanvasImpl extends React.Component<ImageCanvasProps, {}> implements G
 
     protected shouldHandleCanvasShortcut() {
         // canvas shortcuts (select all; delete) should only be handled if the focus is not within a focusable element
-        return document.activeElement === document.body || !document.activeElement;
+        return !this.props.suppressShortcuts && document.activeElement === document.body || !document.activeElement;
     }
 
     protected preventContextMenu = (ev: React.MouseEvent<any>) => ev.preventDefault();
@@ -861,8 +914,67 @@ class ImageCanvasImpl extends React.Component<ImageCanvasProps, {}> implements G
     protected getImageState(): pxt.sprite.ImageState {
         return this.props.isTilemap ? this.props.tilemapState.tilemap : this.props.imageState;
     }
-}
 
+    protected applyTilemapPatch(patch: TilemapPatch) {
+        const { tilemapState, dispatchCreateNewTile, gallery, backgroundColor } = this.props;
+        const { tileset } = tilemapState;
+
+        const copiedMap = pxt.sprite.tilemapLiteralToTilemap(patch.map);
+        if (!copiedMap || !copiedMap.width || !copiedMap.height) {
+            return;
+        }
+
+        const copiedTiles = patch.tiles.map(copiedTile => pxt.sprite.getBitmapFromJResURL(`data:${IMAGE_MIME_TYPE};base64,${copiedTile}`));
+
+        const copiedLayers = patch.layers.map(encoded => pxt.sprite.getBitmapFromJResURL(`data:${IMAGE_MIME_TYPE};base64,${encoded}`));
+        const tileMapping: number[] = [];
+
+        let nextIndex = tileset.tiles.length;
+
+        // Create any missing tiles
+        for (const copiedTile of copiedTiles) {
+            const existing = tileset.tiles.findIndex(tile => copiedTile.equals(pxt.sprite.Bitmap.fromData(tile.bitmap)));
+
+            if (existing >= 0) {
+                tileMapping.push(existing);
+                continue;
+            }
+
+            if (gallery) {
+                const galleryItem = gallery.find(tile => copiedTile.equals(pxt.sprite.Bitmap.fromData(tile.bitmap)));
+
+                if (galleryItem) {
+                    dispatchCreateNewTile(galleryItem.bitmap, tileset.tiles.length, backgroundColor, galleryItem.qualifiedName);
+                    tileMapping.push(nextIndex);
+                    nextIndex++;
+                    continue;
+                }
+            }
+
+            dispatchCreateNewTile(copiedTile.data(), tileset.tiles.length, backgroundColor);
+            tileMapping.push(nextIndex);
+            nextIndex++;
+        }
+
+        this.editState.mergeFloatingLayer();
+
+        const pastedMap = new pxt.sprite.Tilemap(copiedMap.width, copiedMap.height);
+        for (let x = 0; x < pastedMap.width; x++) {
+            for (let y = 0; y < pastedMap.height; y++) {
+                pastedMap.set(x, y, tileMapping[copiedMap.get(x, y)]);
+            }
+        }
+
+        this.editState.floating = {
+            image: pastedMap,
+            overlayLayers: copiedLayers
+        };
+        this.editState.layerOffsetX = 0;
+        this.editState.layerOffsetY = 0;
+
+        this.props.dispatchImageEdit(this.editState.toImageState());
+    }
+}
 
 function mapStateToProps({ store: { present }, editor }: ImageEditorStore, ownProps: any) {
     if (editor.isTilemap) {
@@ -879,7 +991,8 @@ function mapStateToProps({ store: { present }, editor }: ImageEditorStore, ownPr
             backgroundColor: editor.backgroundColor,
             colors: state.colors,
             isTilemap: editor.isTilemap,
-            drawingMode: editor.drawingMode
+            drawingMode: editor.drawingMode,
+            gallery: editor.tileGallery,
         };
     }
 
@@ -896,7 +1009,7 @@ function mapStateToProps({ store: { present }, editor }: ImageEditorStore, ownPr
         onionSkinEnabled: editor.onionSkinEnabled,
         backgroundColor: editor.backgroundColor,
         prevFrame: state.frames[state.currentFrame - 1],
-        isTilemap: editor.isTilemap
+        isTilemap: editor.isTilemap,
     };
 }
 
@@ -906,7 +1019,8 @@ const mapDispatchToProps = {
     dispatchChangeZoom,
     dispatchChangeImageTool,
     dispatchChangeSelectedColor,
-    dispatchChangeBackgroundColor
+    dispatchChangeBackgroundColor,
+    dispatchCreateNewTile
 };
 
 export const ImageCanvas = connect(mapStateToProps, mapDispatchToProps)(ImageCanvasImpl);

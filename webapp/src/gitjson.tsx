@@ -378,7 +378,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
             return;
         }
 
-        const v = pxt.semver.parse(pkg.mainPkg.config.version || "0.0.0")
+        const v = pxt.semver.parse(pkg.mainPkg.config.version, "0.0.0")
         const vmajor = pxt.semver.parse(pxt.semver.stringify(v)); vmajor.major++; vmajor.minor = 0; vmajor.patch = 0;
         const vminor = pxt.semver.parse(pxt.semver.stringify(v)); vminor.minor++; vminor.patch = 0;
         const vpatch = pxt.semver.parse(pxt.semver.stringify(v)); vpatch.patch++;
@@ -559,14 +559,20 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
     }
 
     async commitAsync() {
+        let success = true;
         this.setState({ needsCommitMessage: false });
         this.showLoading("github.commit", true, lf("commit and push changes to GitHub..."));
         try {
             await this.commitCoreAsync()
             await this.maybeReloadAsync()
         } catch (e) {
+            success = false;
+            pxt.tickEvent("github.commit.fail");
             this.handleGithubError(e);
         } finally {
+            if (success) {
+                pxt.tickEvent("github.commit.success");
+            }
             this.hideLoading()
         }
     }

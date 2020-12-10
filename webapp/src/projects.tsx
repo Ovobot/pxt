@@ -91,7 +91,13 @@ export class Projects extends data.Component<ISettingsProps, ProjectsState> {
         pxt.tickEvent("projects.header");
         core.showLoading("changeheader", lf("loading..."));
         this.props.parent.loadHeaderAsync(hdr)
-            .done(() => {
+            .catch(e => {
+                core.warningNotification(lf("Sorry, we could not load this project."));
+                pxt.reportException(e);
+                this.props.parent.openHome();
+                return Promise.reject(e);
+            })
+            .finally(() => {
                 core.hideLoading("changeheader");
             })
     }
@@ -967,6 +973,9 @@ export class ProjectsDetail extends data.Component<ProjectsDetailProps, Projects
                         return this.getActionCard(clickLabel, el.cardType || cardType, onClick, false, el, `action${i}`);
                     })}
                     {cardType === "forumUrl" &&
+                        // TODO (jwunderl) temporarily disabled in electron re: https://github.com/microsoft/pxt-arcade/issues/2346;
+                        // reenable CORS issue is fixed.
+                        !pxt.BrowserUtils.isPxtElectron() &&
                         // TODO (shakao) migrate forumurl to otherAction json in md
                         this.getActionCard(lf("Open in Editor"), "forumExample", this.handleOpenForumUrlInEditor)
                     }

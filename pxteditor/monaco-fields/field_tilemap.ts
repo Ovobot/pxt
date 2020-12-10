@@ -7,11 +7,12 @@ namespace pxt.editor {
     export class MonacoTilemapEditor extends MonacoReactFieldEditor<pxt.sprite.TilemapData> {
         protected tilemapName: string;
         protected isTilemapLiteral: boolean;
+        protected tilemapLiteral: string;
 
         protected textToValue(text: string): pxt.sprite.TilemapData {
             const tm = this.readTilemap(text);
 
-            const allTiles = pxt.react.getTilemapProject().getProjectTiles(tm.tileset.tileWidth);
+            const allTiles = pxt.react.getTilemapProject().getProjectTiles(tm.tileset.tileWidth, true);
 
             for (const tile of allTiles.tiles) {
                 if (!tm.tileset.tiles.some(t => t.id === tile.id)) {
@@ -47,15 +48,23 @@ namespace pxt.editor {
             this.isTilemapLiteral = true;
 
             // This matches the regex for the field editor, so it should always match
-            const match = /^\s*tilemap\s*(?:`([^`]*)`)|(?:\(\s*"""([^"]*)"""\s*\))\s*$/.exec(text);
-            const name = (match[1] || match[2] || "").trim();
+            const match = /^\s*(tilemap(?:8|16|32)?)\s*(?:`([^`]*)`)|(?:\(\s*"""([^"]*)"""\s*\))\s*$/.exec(text);
+            const name = (match[2] || match[3] || "").trim();
+            this.tilemapLiteral = match[1];
 
             if (name) {
                 let id = ts.pxtc.escapeIdentifier(name)
                 let proj = project.getTilemap(id);
 
                 if (!proj) {
-                    const [ name, map ] = project.createNewTilemap(id, 16, 16, 16);
+                    let tileWidth = 16;
+                    if (this.tilemapLiteral === "tilemap8") {
+                        tileWidth = 8;
+                    }
+                    else if (this.tilemapLiteral === "tilemap32") {
+                        tileWidth = 32;
+                    }
+                    const [ name, map ] = project.createNewTilemap(id, tileWidth, 16, 16);
                     proj = map;
                     id = name;
                 }
@@ -84,10 +93,9 @@ namespace pxt.editor {
                     const edited = result.tileset.tiles[editedIndex];
 
                     // New tiles start with *. We haven't created them yet so ignore
-                    if (edited.id.startsWith("*")) continue;
-                    if (edited) {
-                        result.tileset.tiles[editedIndex] = project.updateTile(edited.id, edited.bitmap)
-                    }
+                    if (!edited || edited.id.startsWith("*")) continue;
+
+                    result.tileset.tiles[editedIndex] = project.updateTile(edited.id, edited.bitmap);
                 }
             }
 
@@ -151,7 +159,7 @@ namespace pxt.editor {
                         openParen++;
                     }
                     else if (line.charAt(i) === ")") {
-                        openParen --;
+                        openParen--;
 
                         if (openParen === 0) {
                             const end = new monaco.Position(current.lineNumber, current.column + i + 2);
@@ -179,7 +187,7 @@ namespace pxt.editor {
         weight: 5,
         matcher: {
             // match both JS and python
-            searchString: "(?:tilemap\\s*(?:`|\\(\"\"\")(?:[ a-zA-Z0-9_]|\\n)*\\s*(?:`|\"\"\"\\)))|(?:tiles\\s*\\.\\s*createTilemap\\s*\\([^\\)]+\\))",
+            searchString: "(?:tilemap(?:8|16|32)?\\s*(?:`|\\(\"\"\")(?:[ a-zA-Z0-9_]|\\n)*\\s*(?:`|\"\"\"\\)))|(?:tiles\\s*\\.\\s*createTilemap\\s*\\([^\\)]+\\))",
             isRegex: true,
             matchCase: true,
             matchWholeWord: false

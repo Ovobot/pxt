@@ -106,11 +106,11 @@ export class Editor extends toolboxeditor.ToolboxEditor {
         }
     }
 
-    saveToTypeScriptAsync(): Promise<string> {
+    saveToTypeScriptAsync(willOpenTypeScript = false): Promise<string> {
         if (!this.typeScriptSaveable) return Promise.resolve(undefined);
         this.clearHighlightedStatements();
         try {
-            return pxt.blocks.compileAsync(this.editor, this.blockInfo)
+            return pxt.blocks.compileAsync(this.editor, this.blockInfo, { emitTilemapLiterals: willOpenTypeScript })
                 .then((compilationResult) => {
                     this.compilationResult = compilationResult;
                     pxt.tickActivity("blocks.compile");
@@ -801,9 +801,20 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                                 return; // TODO support serving package docs in docs frame.
                             }
                         };
-                        if (/^\//.test(url))
+                        if (/^github:/.test(url)) {
+                            // strip 'github:', add '.md' file extension if necessary
+                            url = url.replace(/^github:\/?/, '') + (/\.md$/i.test(url) ? "" : ".md");
+                            const readme = pkg.getEditorPkg(pkg.mainPkg).lookupFile(url);
+                            const readmeContent = readme?.content?.trim();
+                            if (readmeContent) {
+                                this.parent.setSideMarkdown(readmeContent);
+                                this.parent.setSideDocCollapsed(false);
+                            }
+                        } else if (/^\//.test(url)) {
                             this.parent.setSideDoc(url);
-                        else window.open(url, 'docs');
+                        } else {
+                            window.open(url, 'docs');
+                        }
                     }
                     this.prepareBlockly();
                 })

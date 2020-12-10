@@ -403,8 +403,10 @@ export function installAsync(h0: InstallHeader, text: ScriptText) {
         h.editor = cfg.preferredEditor
         pxt.Util.setEditorLanguagePref(cfg.preferredEditor);
     }
-    return importAsync(h, text)
-        .then(() => h)
+
+    return pxt.github.cacheProjectDependenciesAsync(cfg)
+        .then(() => importAsync(h, text))
+        .then(() => h);
 }
 
 export function renameAsync(h: Header, newName: string) {
@@ -588,7 +590,7 @@ export async function prAsync(hd: Header, commitId: string, msg: string) {
 }
 
 export function bumpedVersion(cfg: pxt.PackageConfig) {
-    let v = pxt.semver.parse(cfg.version || "0.0.0")
+    let v = pxt.semver.parse(cfg.version, "0.0.0")
     v.patch++
     return pxt.semver.stringify(v)
 }
@@ -676,10 +678,12 @@ export async function commitAsync(hd: Header, options: CommitOptions = {}) {
             await addToTree(BINARY_JS_PATH, compileResp.outfiles[pxtc.BINARY_JS]);
             await addToTree(VERSION_TXT_PATH, v);
             // ensure template files are up to date
-            const templates = pxt.template.targetTemplateFiles();
-            if (templates) {
-                for (const fn of Object.keys(templates)) {
-                    await addToTree(fn, templates[fn]);
+            if (!cfg.disableTargetTemplateFiles) {
+                const templates = pxt.template.targetTemplateFiles();
+                if (templates) {
+                    for (const fn of Object.keys(templates)) {
+                        await addToTree(fn, templates[fn]);
+                    }
                 }
             }
         }

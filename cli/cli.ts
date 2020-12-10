@@ -4339,10 +4339,12 @@ function testSnippetsAsync(snippets: CodeSnippet[], re?: string, pyStrictSyntaxC
 
         let isPy = snippet.ext === "py"
         let inFiles;
+        let extra = snippet.extraFiles || {};
         if (isPy)
-            inFiles = { "main.ts": "", "main.py": snippet.code, "main.blocks": "" }
+            inFiles = { "main.ts": "", "main.py": snippet.code, "main.blocks": "", ...extra }
         else
-            inFiles = { "main.ts": snippet.code, "main.py": "", "main.blocks": "" }
+            inFiles = { "main.ts": snippet.code, "main.py": "", "main.blocks": "", ...extra }
+
         const host = new SnippetHost("snippet" + name, inFiles, snippet.packages);
         host.cache = cache;
         const pkg = new pxt.MainPackage(host);
@@ -4790,7 +4792,7 @@ function buildCoreAsync(buildOpts: BuildCoreOptions): Promise<pxtc.CompileResult
         });
 }
 
-export function staticpkgAsync(parsed: commandParser.ParsedCommand) {
+export async function staticpkgAsync(parsed: commandParser.ParsedCommand) {
     const route = parsed.flags["route"] as string || "/";
     const ghpages = parsed.flags["githubpages"];
     const builtPackaged = parsed.flags["output"] as string || "built/packaged";
@@ -4805,12 +4807,23 @@ export function staticpkgAsync(parsed: commandParser.ParsedCommand) {
 
     pxt.log(`packaging editor to ${builtPackaged}`)
 
-    let p = rimrafAsync(builtPackaged, {})
-        .then(() => bump ? bumpAsync() : Promise.resolve())
-        .then(() => locs && crowdin.downloadTargetTranslationsAsync())
-        .then(() => internalBuildTargetAsync({ packaged: true }));
-    if (ghpages) return p.then(() => ghpPushAsync(builtPackaged, minify));
-    else return p.then(() => internalStaticPkgAsync(builtPackaged, route, minify, disableAppCache));
+    await rimrafAsync(builtPackaged, {});
+
+    if (bump) {
+        await bumpAsync();
+    }
+    if (locs) {
+        await internalGenDocsAsync(false, true);
+        await crowdin.downloadTargetTranslationsAsync();
+    }
+
+    await internalBuildTargetAsync({ packaged: true });
+
+    if (ghpages) {
+        await ghpPushAsync(builtPackaged, minify)
+    } else {
+        await internalStaticPkgAsync(builtPackaged, route, minify, disableAppCache);
+    }
 }
 
 function internalStaticPkgAsync(builtPackaged: string, label: string, minify: boolean, noAppCache?: boolean) {
@@ -5731,18 +5744,28 @@ function internalCheckDocsAsync(compileSnippets?: boolean, re?: string, fix?: bo
                                 const pkgs: pxt.Map<string> = { "blocksprj": "*" };
                                 pxt.Util.jsonMergeFrom(pkgs, pxt.gallery.parsePackagesFromMarkdown(tutorialMd) || {});
 
+                                let extraFiles: Map<string> = null;
+
+                                if (tutorial.jres) {
+                                    extraFiles = {
+                                        [pxt.TILEMAP_JRES]: tutorial.jres,
+                                        [pxt.TILEMAP_CODE]: pxt.emitTilemapsFromJRes(JSON.parse(tutorial.jres))
+                                    };
+                                }
+
                                 // Handles tilemaps, spritekinds
-                                if (tutorial.code.indexOf("namespace") !== -1
+                                if (tutorial.code.some(tut => tut.indexOf("namespace") !== -1)
                                     // Handles ```python``` snippets
                                     || (tutorial.language == "python")) {
                                     tutorial.steps
                                         .filter(step => !!step.contentMd)
-                                        .forEach((step, stepIndex) => getCodeSnippets(`${gal.name}-${stepIndex}`, step.contentMd)
+                                        .forEach((step, stepIndex) => getCodeSnippets(`${card.name}-${stepIndex}`, step.contentMd)
                                             .forEach((snippet, snippetIndex) => {
                                                 snippet.packages = pkgs;
+                                                snippet.extraFiles = extraFiles;
                                                 addSnippet(
                                                     snippet,
-                                                    "tutorial" + `${gal.name}-${stepIndex}-${snippetIndex}`,
+                                                    `tutorial${card.name}-${stepIndex}-${snippetIndex}`,
                                                     cardIndex
                                                 )
                                             })
@@ -5751,10 +5774,11 @@ function internalCheckDocsAsync(compileSnippets?: boolean, re?: string, fix?: bo
                                 else {
                                     addSnippet(<CodeSnippet>{
                                         name: card.name,
-                                        code: tutorial.code,
+                                        code: tutorial.code.join("\n"),
                                         type: "blocks",
                                         ext: "ts",
-                                        packages: pkgs
+                                        packages: pkgs,
+                                        extraFiles: extraFiles
                                     }, "tutorial" + gal.name, cardIndex);
                                 }
                             }
@@ -5769,11 +5793,21 @@ function internalCheckDocsAsync(compileSnippets?: boolean, re?: string, fix?: bo
                                 const prj = pxt.gallery.parseExampleMarkdown(card.name, exMd);
                                 const pkgs: pxt.Map<string> = { "blocksprj": "*" };
                                 pxt.U.jsonMergeFrom(pkgs, prj.dependencies);
+
+                                let extraFiles: Map<string> = undefined;
+
+                                if (prj.filesOverride[pxt.TILEMAP_CODE] && prj.filesOverride[pxt.TILEMAP_JRES]) {
+                                    extraFiles = {
+                                        [pxt.TILEMAP_CODE]: prj.filesOverride[pxt.TILEMAP_CODE],
+                                        [pxt.TILEMAP_JRES]: prj.filesOverride[pxt.TILEMAP_JRES]
+                                    };
+                                }
                                 addSnippet(<CodeSnippet>{
                                     name: card.name,
                                     code: prj.filesOverride["main.ts"],
                                     type: "blocks",
                                     ext: "ts",
+                                    extraFiles,
                                     packages: pkgs
                                 }, "example" + gal.name, cardIndex);
                             }
@@ -5825,6 +5859,7 @@ export function getSnippets(source: string): SnippetInfo[] {
 export interface CodeSnippet {
     name: string;
     code: string;
+    extraFiles?: pxt.Map<string>;
     type: string;
     ext: string;
     packages: pxt.Map<string>;
@@ -5846,6 +5881,18 @@ export function getCodeSnippets(fileName: string, md: string): CodeSnippet[] {
     }
     let snippets = getSnippets(md);
     const codeSnippets = snippets.filter(snip => !snip.ignore && !!supported[snip.type]);
+    const jres = snippets.filter(snip => snip.type === "jres")[0];
+
+    let extraFiles: Map<string> = null;
+
+    if (jres) {
+        extraFiles = {
+            [pxt.TILEMAP_JRES]: jres.code,
+            [pxt.TILEMAP_CODE]: pxt.emitTilemapsFromJRes(JSON.parse(jres.code))
+        };
+    }
+
+
     const pkgs: pxt.Map<string> = {
         "blocksprj": "*"
     }
@@ -5867,6 +5914,7 @@ export function getCodeSnippets(fileName: string, md: string): CodeSnippet[] {
             name: `${pkgName}-${i}`,
             code: snip.code,
             type: snip.type,
+            extraFiles: extraFiles,
             ext: supported[snip.type],
             packages: pkgs
         };

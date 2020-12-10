@@ -68,7 +68,6 @@ class CompletionProvider implements monaco.languages.CompletionItemProvider {
         const wordStartOffset = model.getOffsetAt({ lineNumber: position.lineNumber, column: word.startColumn })
         const wordEndOffset = model.getOffsetAt({ lineNumber: position.lineNumber, column: word.endColumn })
 
-
         return compiler.completionsAsync(fileName, offset, wordStartOffset, wordEndOffset, source)
             .then(completions => {
                 function stripLocalNamespace(qName: string): string {
@@ -1191,6 +1190,10 @@ export class Editor extends toolboxeditor.ToolboxEditor {
             monaco.languages.registerFoldingRangeProvider("python", this.fieldEditors);
         }
 
+        this.editor.onDidChangeCursorPosition((e: monaco.editor.ICursorPositionChangedEvent) => {
+            if (this.fieldEditors) this.fieldEditors.setCursorLine(e.position.lineNumber);
+        });
+
         pxt.appTarget.appTheme.monacoFieldEditors.forEach(name => {
             const editor = pxt.editor.getMonacoFieldEditor(name);
             if (editor) {
@@ -1565,6 +1568,19 @@ export class Editor extends toolboxeditor.ToolboxEditor {
         }
         this.feWidget = new ModalEditorHost(fe, range, this.editor.getModel());
         // this.feWidget.heightInPx = viewZoneHeight;
+
+        const triggerRebuildIfNeeded = () => {
+            if (buildAfter) {
+                simulator.setDirty();
+
+                if (this.fileType == "typescript") {
+                    // If the field editor changed something then we can't guarantee that
+                    // using a cached decompile is safe
+                    pkg.mainEditorPkg().invalidateCachedTranspile("ts", this.getCurrentSource(), "blocks");
+                }
+            }
+        }
+
         this.feWidget.showAsync(this.fileType, this.editor)
             .then(edit => {
                 this.activeRangeID = null;
@@ -1572,14 +1588,10 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                     this.editModelAsync(edit.range, edit.replacement)
                         .then(newRange => this.indentRangeAsync(newRange))
                         .then(() => this.foldFieldEditorRangesAsync())
-                        .then(() => {
-                            if (buildAfter) {
-                                simulator.setDirty();
-                            }
-                        })
+                        .then(triggerRebuildIfNeeded)
                 }
-                else if (buildAfter) {
-                    simulator.setDirty();
+                else {
+                    triggerRebuildIfNeeded();
                 }
             })
     }
