@@ -1116,6 +1116,7 @@ function uploadCoreAsync(opts: UploadOptions) {
         "/embed.js": "/---embed",//"@targetUrl@@relprefix@embed"
         "/cdn/": "@commitCdnUrl@",
         "/doccdn/": "@commitCdnUrl@",
+        "/docfiles/": "@commitCdnUrl@",
         "/sim/": "@commitCdnUrl@",
         "/blb/": "@blobCdnUrl@",
         "@timestamp@": "",
@@ -1165,6 +1166,7 @@ function uploadCoreAsync(opts: UploadOptions) {
             "/embed.js": opts.localDir + "embed.js",
             "/cdn/": opts.localDir,
             "/doccdn/": opts.localDir,
+            "/docfiles/":opts.localDir,
             "/sim/": opts.localDir,
             "/blb/": opts.localDir,
             "@monacoworkerjs@": `${opts.localDir}monacoworker.js`,
@@ -2528,7 +2530,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
     let docsTemplate = server.expandDocFileTemplate("docs.html")
     docsTemplate = U.replaceAll(docsTemplate, "/cdn/", webpath)
     //docsTemplate = U.replaceAll(docsTemplate, "/doccdn/", webpath)
-    docsTemplate = U.replaceAll(docsTemplate, "/docfiles/", webpath + "")
+    //docsTemplate = U.replaceAll(docsTemplate, "/docfiles/", webpath + "")
 
     docsTemplate = U.replaceAll(docsTemplate, "/--embed", webpath + "/---embed")
     
@@ -2593,6 +2595,20 @@ function renderDocs(builtPackaged: string, localDir: string) {
     }
 
     docsTemplate = docsTemplate.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
+        //console.log("find doccdn url = ",url);    
+        if(uplReqs_proj[url]){
+            let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
+            return `${cdnurl}"`
+        } else if(uplReqs[url]){
+            let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs[url] +"/"+url;
+            return `${cdnurl}"`
+        } else {
+            let cdnurl = url;
+            return `${cdnurl}"`
+        }
+    });
+
+    docsTemplate = docsTemplate.replace(/\/docfiles\/(.*?)"/g, (f,  url) => {
         //console.log("find doccdn url = ",url);    
         if(uplReqs_proj[url]){
             let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+ uplReqs_proj[url] +"/"+url;
@@ -2674,7 +2690,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                     url = U.replaceAll(url, "/cdn/", webpath)
                     //url = U.replaceAll(url, "/doccdn/", webpath)
                     
-                    url = U.replaceAll(url, "/docfiles/", webpath + "")
+                    //url = U.replaceAll(url, "/docfiles/", webpath + "")
 
                     // console.log("did find link href", url);
                     // console.log("href hash ", uplReqs_proj[url]);
@@ -2712,6 +2728,19 @@ function renderDocs(builtPackaged: string, localDir: string) {
                 });
 
                 html = html.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
+                    if(uplReqs_proj[url]){
+                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        return `${cdnurl}"`
+                    } else if(uplReqs[url]){
+                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        return `${cdnurl}"`
+                    } else {
+                        let cdnurl = url;
+                        return `${cdnurl}"`
+                    }
+                });
+
+                html = html.replace(/\/docfiles\/(.*?)"/g, (f,  url) => {
                     if(uplReqs_proj[url]){
                         let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
                         return `${cdnurl}"`
