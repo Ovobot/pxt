@@ -21,6 +21,7 @@ declare namespace pxt {
     interface TargetConfig {
         packages?: PackagesConfig;
         shareLinks?: ShareConfig;
+        skillMap?: SkillMapConfig;
         // common galleries
         galleries?: pxt.Map<string | GalleryProps>;
         // localized galleries
@@ -42,10 +43,17 @@ declare namespace pxt {
         // "acme-corp/pxt-widget": "min:v0.1.2" - auto-upgrade to that version
         // "acme-corp/pxt-widget": "dv:foo,bar" - add "disablesVariant": ["foo", "bar"] to pxt.json
         upgrades?: pxt.Map<string>;
+        // list of trusted custom editor extension urls
+        // that can bypass consent and send/receive messages
+        approvedEditorExtensionUrls?: string[];
     }
 
     interface ShareConfig {
         approved?: string[];
+    }
+
+    interface SkillMapConfig {
+        defaultPath?: string;
     }
 
     interface AppTarget {
@@ -74,7 +82,8 @@ declare namespace pxt {
         alwaysMultiVariant?: boolean;
         queryVariants?: Map<AppTarget>; // patches on top of the current AppTarget using query url regex
         unsupportedBrowsers?: BrowserOptions[]; // list of unsupported browsers for a specific target (eg IE11 in arcade). check browserutils.js browser() function for strings
-        checkdocsdirs?: string[]; // list of folders for checkdocs, irrespective of SUMMARY.md
+        checkdocsdirs?: string[]; // list of /docs subfolders for checkdocs, irrespective of SUMMARY.md
+        cacheusedblocksdirs?: string[]; // list of /docs subfolders for parsing and caching used block ids (for tutorial loading)
         blockIdMap?: Map<string[]>; // list of target-specific blocks that are "synonyms" (eg. "agentturnright" and "minecraftAgentTurn")
     }
 
@@ -173,9 +182,16 @@ declare namespace pxt {
         cloudProviders?: pxt.Map<AppCloudProvider>;
     }
 
+    type IdentityProviderId = "makecode" | "microsoft" | "google" | "github";
+
     interface AppCloudProvider {
-        client_id: string;
+        id: IdentityProviderId;
+        name?: string;
+        icon?: string;
+        client_id?: string;
         redirect?: boolean; // Whether or not to popup or redirect the oauth. Default to popup
+        identity?: boolean; // Whether or not this provider can be used for top-level login
+        order?: number;     // Sort order
     }
 
     interface AppSimulator {
@@ -201,6 +217,16 @@ declare namespace pxt {
         invalidatedClass?: string; // CSS class to be applied to the sim iFrame when it needs to be updated (defaults to sepia filter)
         stoppedClass?: string; // CSS class to be applied to the sim iFrame when it isn't running (defaults to grayscale filter)
         keymap?: boolean; // when non-empty and autoRun is disabled, this code is run upon simulator first start
+
+        // a map of allowed simulator channel to URL to handle specific control messages
+        messageSimulators?: pxt.Map<{
+            // the URL to load the simulator, $PARENT_ORIGIN$ will be replaced by the parent
+            // origin to validate messages
+            url: string;
+            // url when localhost developer mode is enabled, add localhostmessagesims=1 to enable this mode
+            localHostUrl?: string;
+            aspectRatio?: number;
+        }>;
     }
 
     interface TargetCompileService {
@@ -261,6 +287,7 @@ declare namespace pxt {
         TOC?: TOCMenuEntry[];
         hideSideDocs?: boolean;
         homeScreenHero?: string; // home screen hero image
+        homeScreenHeroGallery?: string; // path to markdown file containing the gallery to display on homescreen
         sideDoc?: string; // deprecated
         hasReferenceDocs?: boolean; // if true: the monaco editor will add an option in the context menu to load the reference docs
         feedbackUrl?: string; // is set: a feedback link will show in the settings menu
@@ -352,10 +379,12 @@ declare namespace pxt {
         tagColors?: pxt.Map<string>; // optional colors for tags
         dontSuspendOnVisibility?: boolean; // we're inside an app, don't suspend the editor
         disableFileAccessinMaciOs?: boolean; //Disable save & import of files in Mac and iOS, mainly used as embed webkit doesn't support these
+        disableFileAccessinAndroid?: boolean; // Disable import of files in Android.
         baseTheme?: string; // Use this to determine whether to show a light or dark theme, default is 'light', options are 'light', 'dark', or 'hc'
         scriptManager?: boolean; // Whether or not to enable the script manager. default: false
         monacoFieldEditors?: string[]; // A list of field editors to show in monaco. Currently only "image-editor" is supported
         disableAPICache?: boolean; // Disables the api cache in target.js
+        sidebarTutorial? : boolean; // Move the tutorial pane to be on the left side of the screen
         /**
          * Internal and temporary flags:
          * These flags may be removed without notice, please don't take a dependency on them
@@ -396,6 +425,12 @@ declare namespace pxt {
         tutorialExplicitHints?: boolean; // allow use explicit hints
         errorList?: boolean; // error list experiment
         embedBlocksInSnapshot?: boolean; // embed blocks xml in right-click snapshot
+        blocksErrorList?: boolean; // blocks error list experiment
+        identity?: boolean; // login with identity providers
+        assetEditor?: boolean; // enable asset editor view (in blocks/text toggle)
+        disableMemoryWorkspaceWarning?: boolean; // do not warn the user when switching to in memory workspace
+        embeddedTutorial?: boolean;
+        disableBlobObjectDownload?: boolean; // use data uri downloads instead of object urls
     }
 
     interface SocialOptions {
@@ -429,6 +464,12 @@ declare namespace pxt {
         bundleddirs: string[];
         versions: TargetVersions;        // @derived
         apiInfo?: Map<PackageApiInfo>;
+        tutorialInfo?: Map<BuiltTutorialInfo>; // hash of tutorial code mapped to prebuilt info for each tutorial
+    }
+
+    interface BuiltTutorialInfo {
+        hash?: string;
+        usedBlocks: Map<number>;
     }
 
     interface PackageApiInfo {
@@ -506,6 +547,7 @@ declare namespace ts.pxtc {
         useModulator?: boolean;
         webUSB?: boolean; // use WebUSB when supported
         hexMimeType?: string;
+        moveHexEof?: boolean;
         driveName?: string;
         jsRefCounting?: boolean;
         utf8?: boolean;
@@ -609,7 +651,6 @@ declare namespace ts.pxtc {
         icon?: string;
         jresURL?: string;
         iconURL?: string;
-        frameImages?:string;
         imageLiteral?: number;
         imageLiteralColumns?: number; // optional number of columns
         imageLiteralRows?: number; // optional number of rows
@@ -638,7 +679,6 @@ declare namespace ts.pxtc {
         group?: string;
         whenUsed?: boolean;
         jres?: string;
-        frames?:string;
         tags?: string; // value used to describe an element in a gallery when filtering / searching
         useLoc?: string; // The qName of another API whose localization will be used if this API is not translated and if both block definitions are identical
         topblock?: boolean;
@@ -695,6 +735,7 @@ declare namespace ts.pxtc {
         _def?: ParsedBlockDef;
         _expandedDef?: ParsedBlockDef;
         _untranslatedBlock?: string; // The block definition before it was translated
+        _untranslatedJsDoc?: string // the jsDoc before it was translated
         _shadowOverrides?: pxt.Map<string>;
         jsDoc?: string;
         paramHelp?: pxt.Map<string>;
@@ -767,6 +808,7 @@ declare namespace ts.pxtc {
         // qualified name (e.g. "Blocks.Grass")
         qName?: string;
         pkg?: string;
+        pkgs?: string[]; // for symbols defined in multiple packages
         snippet?: string;
         snippetName?: string;
         snippetWithMarkers?: string; // TODO(dz)
@@ -835,6 +877,14 @@ declare namespace ts.pxtc {
         ignoreFileResolutionErrors?: boolean; // ignores triple-slash directive errors; debug only
     }
 
+    interface BuiltSimJsInfo {
+        js: string;
+        targetVersion: string;
+        fnArgs?: pxt.Map<String[]>;
+        parts?: string[];
+        usedBuiltinParts?: string[];
+    }
+
     interface UpgradePolicy {
         type: "api" | "blockId" | "missingPackage" | "package" | "blockValue" | "userenum";
         map?: pxt.Map<string>;
@@ -895,6 +945,7 @@ declare namespace pxt.tutorial {
         language?: string; // language of code snippet (ts or python)
         templateCode?: string;
         metadata?: TutorialMetadata;
+        assetFiles?: pxt.Map<string>;
         jres?: string; // JRES to be used when generating hints; necessary for tilemaps
     }
 
@@ -910,9 +961,11 @@ declare namespace pxt.tutorial {
     }
 
     interface TutorialStepInfo {
-        fullscreen?: boolean;
-        // no coding
-        unplugged?: boolean;
+        // fullscreen?: boolean; // DEPRECATED, replaced by "showHint"
+        // unplugged?: boolean: // DEPRECATED, replaced by "showDialog"
+
+        showHint?: boolean; // automatically displays hint
+        showDialog?: boolean; // no coding, displays in modal
         tutorialCompleted?: boolean;
         contentMd?: string;
         headerContentMd?: string;
@@ -943,6 +996,7 @@ declare namespace pxt.tutorial {
         autoexpandStep?: boolean; // autoexpand tutorial card if instruction text overflows
         metadata?: TutorialMetadata; // metadata about the tutorial parsed from the markdown
         language?: string; // native language of snippets ("python" for python, otherwise defaults to typescript)
+        assetFiles?: pxt.Map<string>;
         jres?: string; // JRES to be used when generating hints; necessary for tilemaps
     }
     interface TutorialCompletionInfo {

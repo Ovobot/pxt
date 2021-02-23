@@ -243,6 +243,25 @@ namespace pxt {
                 this.configureAsInvalidPackage(lf("version not specified for {0}", this.id));
                 v = this._verspec;
             }
+            // patch github version numbers
+            else if (this.verProtocol() == "github") {
+                const ghid = pxt.github.parseRepoId(this._verspec);
+                if (ghid && !ghid.tag && this.parent) {
+                    // we have a valid repo but no tag
+                    pxt.debug(`dep: unbound github extensions, trying to resolve tag`)
+                    // check if we've already loaded this slug in the project, in which case we use that version number
+                    const others = pxt.semver.sortLatestTags(Util.values(this.parent?.deps || {})
+                        .map(dep => pxt.github.parseRepoId(dep.version()))
+                        .filter(v => v?.slug === ghid.slug)
+                        .map(v => v.tag));
+                    const best = others[0];
+                    if (best) {
+                        ghid.tag = best;
+                        this.resolvedVersion = v = pxt.github.stringifyRepo(ghid);
+                        pxt.debug(`dep: github patched ${this._verspec} to ${v}`)
+                    }
+                }
+            }
             return Promise.resolve(v)
         }
 
@@ -289,6 +308,8 @@ namespace pxt {
             // handle invalid names downstream
             if (this.config.targetVersions
                 && this.config.targetVersions.target
+                && this.config.targetVersions.targetId === pxt.appTarget.id // make sure it's the same target
+                && appTarget.versions
                 && semver.majorCmp(this.config.targetVersions.target, appTarget.versions.target) > 0)
                 U.userError(lf("{0} requires target version {1} (you are running {2})",
                     this.config.name, this.config.targetVersions.target, appTarget.versions.target))
@@ -622,15 +643,65 @@ namespace pxt {
                 })
             }
 
+            const handleVerMismatch = (mod: Package, ver: string) => {
+                pxt.debug(`version spec mismatch: ${mod._verspec} != ${ver}`)
+
+                // if both are github, try to pick the higher semver
+                if (/^github:/.test(mod._verspec) && /^github:/.test(ver)) {
+                    const modid = pxt.github.parseRepoId(mod._verspec);
+                    const verid = pxt.github.parseRepoId(ver);
+                    // same repo
+                    if (modid?.slug && modid?.slug === verid?.slug) {
+                        // if modid does not have a tag, try sniffing it from config
+                        // this may be an issue if the user does not create releases
+                        // and pulls from master
+                        const modtag = modid?.tag || mod.config?.version;
+                        const c = pxt.semver.strcmp(modtag, verid.tag);
+                        if (c == 0) {
+                            // turns out to be the same versions
+                            pxt.debug(`resolved version are ${modtag}`)
+                            return;
+                        }
+                        else if (c < 0) {
+                            // already loaded version of dependencies is greater
+                            // than current version, use it instead
+                            pxt.debug(`auto-upgraded ${ver} to ${modtag}`)
+                            return;
+                        }
+                    }
+                }
+
+                // ignore, file: protocol
+                if (/^file:/.test(mod._verspec) || /^file:/.test(ver)) {
+                    pxt.debug(`ignore file: mismatch issues`)
+                    return;
+                }
+
+                // crashing if really really not good
+                // so instead we just ignore and continute
+                mod.configureAsInvalidPackage(lf("version mismatch"))
+            }
 
             const loadDepsRecursive = async (deps: pxt.Map<string>, from: Package, isCpp = false) => {
-                if (!deps) deps = from.dependencies(isCpp)
+                if (!deps) deps = from.dependencies(isCpp);
+
+                pxt.debug(`deps: ${from.id}->${Object.keys(deps).join(", ")}`);
+                deps = pxt.github.resolveMonoRepoVersions(deps);
+                pxt.debug(`deps: resolved ${from.id}->${Object.keys(deps).join(", ")}`);
+
                 for (let id of Object.keys(deps)) {
-                    const ver = deps[id] || "*"
+                    let ver = deps[id] || "*"
+                    pxt.debug(`dep: load ${from.id}.${id}${isCpp ? "++" : ""}: ${ver}`)
                     if (id == "hw" && pxt.hwVariant)
                         id = "hw---" + pxt.hwVariant
                     let mod = from.resolveDep(id)
                     if (mod) {
+                        // check if the current dependecy matches the ones
+                        // loaded in parent
+                        if (!mod.invalid() && mod._verspec !== ver)
+                            handleVerMismatch(mod, ver);
+
+                        // bail out if invalid
                         if (mod.invalid()) {
                             // failed to resolve dependency, ignore
                             mod.level = Math.min(mod.level, from.level + 1)
@@ -638,8 +709,6 @@ namespace pxt {
                             continue
                         }
 
-                        if (mod._verspec != ver && !/^file:/.test(mod._verspec) && !/^file:/.test(ver))
-                            U.userError("Version spec mismatch on " + id)
                         if (!isCpp) {
                             mod.level = Math.min(mod.level, from.level + 1)
                             mod.addedBy.push(from)
@@ -725,21 +794,30 @@ namespace pxt {
             const fd = this.config.fileDependencies
             if (this.config.fileDependencies)
                 res = res.filter(fn => {
-                    let cond = U.lookup(fd, fn)
-                    if (!cond) return true
-                    cond = cond.trim()
-                    if (!cond) return true
-                    if (/^[\w-]+$/.test(cond)) {
-                        const dep = this.parent.resolveDep(cond)
-                        if (dep && !dep.cppOnly)
-                            return true
+                    const evalCond = (cond: string): boolean => {
+                        cond = cond.trim()
+                        if (cond[0] == '!')
+                            return !evalCond(cond.slice(1))
+                        if (/^[\w-]+$/.test(cond)) {
+                            const dep = this.parent.resolveDep(cond)
+                            if (dep && !dep.cppOnly)
+                                return true
+                            return false
+                        }
+                        const m = /^target:(\w+)$/.exec(cond)
+                        if (m)
+                            return m[1] == pxt.appTarget.id || m[1] == pxt.appTarget.platformid
+
+                        if (!Package.depWarnings[cond]) {
+                            Package.depWarnings[cond] = true
+                            pxt.log(`invalid dependency expression: ${cond} in ${this.id}/${fn}`)
+                        }
                         return false
                     }
-                    if (!Package.depWarnings[cond]) {
-                        Package.depWarnings[cond] = true
-                        pxt.log(`invalid dependency expression: ${cond} in ${this.id}/${fn}`)
-                    }
-                    return false
+
+                    const cond = U.lookup(fd, fn)
+                    if (!cond || !cond.trim()) return true
+                    return cond.split('||').some(c => c.split('&&').every(evalCond))
                 })
             return res
         }
@@ -1236,6 +1314,7 @@ namespace pxt {
                 namespace: ns,
                 mimeType,
                 tilemapTile: v.tilemapTile,
+                displayName: v.displayName,
                 tileset: v.tileset
             }
         }

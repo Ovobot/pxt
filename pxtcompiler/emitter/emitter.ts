@@ -971,7 +971,19 @@ namespace ts.pxtc {
                 };
             }
 
-            hexfile.setupFor(opts.target, opts.extinfo || emptyExtInfo());
+            let extinfo = opts.extinfo
+            let optstarget = opts.target
+            // if current (main) extinfo is disabled use another one
+            if (extinfo && extinfo.disabledDeps) {
+                const enabled = (opts.otherMultiVariants || []).find(e => e.extinfo && !e.extinfo.disabledDeps)
+                if (enabled) {
+                    pxt.debug(`using alternative extinfo (due to ${extinfo.disabledDeps})`)
+                    extinfo = enabled.extinfo
+                    optstarget = enabled.target
+                }
+            }
+
+            hexfile.setupFor(optstarget, extinfo || emptyExtInfo());
             hexfile.setupInlineAssembly(opts);
         }
 
@@ -1006,10 +1018,16 @@ namespace ts.pxtc {
             let files = program.getSourceFiles().slice();
 
             const main = files.find(sf => sf.fileName === "main.ts");
-
             if (main) {
                 files = files.filter(sf => sf.fileName !== "main.ts");
                 files.push(main);
+            }
+
+            // run post-processing code last, if present
+            const postProcessing = files.find(sf => sf.fileName === pxt.TUTORIAL_CODE_STOP);
+            if (postProcessing) {
+                files = files.filter(sf => sf.fileName !== pxt.TUTORIAL_CODE_STOP);
+                files.push(postProcessing);
             }
 
             files.forEach(f => {
@@ -1333,7 +1351,7 @@ namespace ts.pxtc {
                             if (!h.types || h.types.length != 1)
                                 throw userError(9228, lf("invalid extends clause"))
                             let superType = typeOf(h.types[0])
-                            if (superType && isClassType(superType) && !isGenericType(superType)) {
+                            if (superType && isClassType(superType)) {
                                 // check if user defined
                                 // let filename = getSourceFileOfNode(tp.symbol.valueDeclaration).fileName
                                 // if (program.getRootFileNames().indexOf(filename) == -1) {

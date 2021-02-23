@@ -10,7 +10,7 @@ namespace pxt.tutorial {
             return undefined; // error parsing steps
 
         // collect code and infer editor
-        const { code, templateCode, editor, language, jres } = computeBodyMetadata(body);
+        const { code, templateCode, editor, language, jres, assetJson } = computeBodyMetadata(body);
 
         // noDiffs legacy
         if (metadata.diffs === true // enabled in tutorial
@@ -22,6 +22,8 @@ namespace pxt.tutorial {
         ) {
             diffify(steps, activities);
         }
+
+        const assetFiles = parseAssetJson(assetJson);
 
         // strip hidden snippets
         steps.forEach(step => {
@@ -39,19 +41,21 @@ namespace pxt.tutorial {
             templateCode,
             metadata,
             language,
-            jres
+            jres,
+            assetFiles
         };
     }
 
     function computeBodyMetadata(body: string) {
         // collect code and infer editor
         let editor: string = undefined;
-        const regex = /``` *(sim|block|blocks|filterblocks|spy|ghost|typescript|ts|js|javascript|template|python|jres)?\s*\n([\s\S]*?)\n```/gmi;
+        const regex = /``` *(sim|block|blocks|filterblocks|spy|ghost|typescript|ts|js|javascript|template|python|jres|assetjson)?\s*\n([\s\S]*?)\n```/gmi;
         let jres: string;
         let code: string[] = [];
         let templateCode: string;
         let language: string;
         let idx = 0;
+        let assetJson: string;
         // Concatenate all blocks in separate code blocks and decompile so we can detect what blocks are used (for the toolbox)
         body
             .replace(/((?!.)\s)+/g, "\n")
@@ -83,6 +87,10 @@ namespace pxt.tutorial {
                     case "jres":
                         jres = m2;
                         break;
+                    case "assetjson":
+                        assetJson = m2;
+                        break;
+
                 }
                 code.push(m1 == "python" ? `\n${m2}\n` : `{\n${m2}\n}`);
                 idx++
@@ -90,7 +98,7 @@ namespace pxt.tutorial {
             });
         // default to blocks
         editor = editor || pxt.BLOCKS_PROJECT_NAME
-        return { code, templateCode, editor, language, jres }
+        return { code, templateCode, editor, language, jres, assetJson }
 
         function checkTutorialEditor(expected: string) {
             if (editor && editor != expected) {
@@ -216,10 +224,10 @@ ${code}
                 contentMd: step,
                 headerContentMd: header
             }
-            if (/@(fullscreen|unplugged)/.test(flags))
-                info.fullscreen = true;
-            if (/@unplugged/.test(flags))
-                info.unplugged = true;
+            if (/@(fullscreen|unplugged|showdialog|showhint)/i.test(flags))
+                info.showHint = true;
+            if (/@(unplugged|showdialog)/i.test(flags))
+                info.showDialog = true;
             if (/@tutorialCompleted/.test(flags))
                 info.tutorialCompleted = true;
             if (/@resetDiff/.test(flags))
@@ -267,7 +275,7 @@ ${code}
     /* Remove hidden snippets from text */
     function stripHiddenSnippets(str: string): string {
         if (!str) return str;
-        const hiddenSnippetRegex = /```(filterblocks|package|ghost|config|template|jres)\s*\n([\s\S]*?)\n```/gmi;
+        const hiddenSnippetRegex = /```(filterblocks|package|ghost|config|template|jres|assetjson)\s*\n([\s\S]*?)\n```/gmi;
         return str.replace(hiddenSnippetRegex, '').trim();
     }
 
@@ -352,10 +360,63 @@ ${code}
             autoexpandStep: true,
             metadata: tutorialInfo.metadata,
             language: tutorialInfo.language,
-            jres: tutorialInfo.jres
+            jres: tutorialInfo.jres,
+            assetFiles: tutorialInfo.assetFiles
         };
 
         return { options: tutorialOptions, editor: tutorialInfo.editor };
     }
 
+
+    export function parseCachedTutorialInfo(json: string, id?: string) {
+        let cachedInfo = pxt.Util.jsonTryParse(json) as pxt.Map<pxt.BuiltTutorialInfo>;
+        if (!cachedInfo) return Promise.resolve();
+
+        return pxt.BrowserUtils.tutorialInfoDbAsync()
+            .then(db =>  {
+                if (id && cachedInfo[id]) {
+                    const info = cachedInfo[id];
+                    if (info.usedBlocks && info.hash) db.setWithHashAsync(id, info.usedBlocks, info.hash);
+                } else {
+                    for (let key of Object.keys(cachedInfo)) {
+                        const info = cachedInfo[key];
+                        if (info.usedBlocks && info.hash) db.setWithHashAsync(key, info.usedBlocks, info.hash);
+                    }
+                }
+            }).catch((err) => {})
+    }
+
+    export function resolveLocalizedMarkdown(ghid: pxt.github.ParsedRepo, files: pxt.Map<string>, fileName?: string): string {
+        // if non-default language, find localized file if any
+        const mfn = (fileName || ghid.fileName || "README") + ".md";
+
+        let md: string = undefined;
+        const [initialLang, baseLang, initialLangLowerCase] = pxt.Util.normalizeLanguageCode(pxt.Util.userLanguage());
+        if (initialLang && baseLang && initialLangLowerCase) {
+            //We need to first search base lang and then intial Lang
+            //Example: normalizeLanguageCode en-IN  will return ["en-IN", "en", "en-in"] and nb will be returned as ["nb"]
+            md = files[`_locales/${initialLang}/${mfn}`]
+                || files[`_locales/${initialLangLowerCase}/${mfn}`]
+                || files[`_locales/${baseLang}/${mfn}`]
+
+        } else {
+            md = files[`_locales/${initialLang}/${mfn}`];
+        }
+        md = md || files[mfn];
+        return md;
+    }
+
+
+    export function parseAssetJson(json: string): pxt.Map<string> {
+        if (!json) return undefined;
+
+        const files: pxt.Map<string> = JSON.parse(json);
+
+        return {
+            [pxt.TILEMAP_JRES]: files[pxt.TILEMAP_JRES],
+            [pxt.TILEMAP_CODE]: files[pxt.TILEMAP_CODE],
+            [pxt.IMAGES_JRES]: files[pxt.IMAGES_JRES],
+            [pxt.IMAGES_CODE]: files[pxt.IMAGES_CODE]
+        }
+    }
 }

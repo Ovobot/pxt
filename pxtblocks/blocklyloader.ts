@@ -16,6 +16,12 @@ namespace pxt.blocks {
         declaredVariables: string;
     }
 
+    // Parsed format of data stored in the .data attribute of blocks
+    export interface PXTBlockData {
+        commentRefs: string[];
+        fieldData: pxt.Map<string>;
+    }
+
     const typeDefaults: Map<{ field: string, block: string, defaultValue: string }> = {
         "string": {
             field: "TEXT",
@@ -409,12 +415,15 @@ namespace pxt.blocks {
         // inject Blockly with all block definitions
         return blockInfo.blocks
             .map(fn => {
+                const comp = compileInfo(fn);
+                const block = createToolboxBlock(blockInfo, fn, comp);
+
                 if (fn.attributes.blockBuiltin) {
                     Util.assert(!!builtinBlocks()[fn.attributes.blockId]);
-                    builtinBlocks()[fn.attributes.blockId].symbol = fn;
+                    const builtin = builtinBlocks()[fn.attributes.blockId];
+                    builtin.symbol = fn;
+                    builtin.block.codeCard = mkCard(fn, block);
                 } else {
-                    let comp = compileInfo(fn);
-                    let block = createToolboxBlock(blockInfo, fn, comp);
                     injectBlockDefinition(blockInfo, fn, comp, block);
                 }
                 return fn;
@@ -760,7 +769,7 @@ namespace pxt.blocks {
                                         width: 36,
                                         height: 36,
                                         value: v.name
-                                    } :v.attributes.frames ? {frame:v.attributes.frameImages} : k,
+                                    } : k,
                                     v.namespace + "." + v.name
                                 ];
                             });
@@ -2209,6 +2218,26 @@ namespace pxt.blocks {
                 });
 
                 setBuiltinHelpInfo(this, variablesChangeId);
+            },
+            /**
+             * Add menu option to create getter block for this variable
+             * @param {!Array} options List of menu options to add to.
+             * @this Blockly.Block
+             */
+            customContextMenu: function (options: any[]) {
+                let option: any = {
+                    enabled: this.workspace.remainingCapacity() > 0
+                };
+
+                let name = this.getField("VAR").getText();
+                option.text = lf("Create 'get {0}'", name)
+
+                let xmlField = goog.dom.createDom('field', null, name);
+                xmlField.setAttribute('name', 'VAR');
+                let xmlBlock = goog.dom.createDom('block', null, xmlField);
+                xmlBlock.setAttribute('type', "variables_get");
+                option.callback = Blockly.ContextMenu.callbackFactory(this, xmlBlock);
+                options.push(option);
             }
         };
 
@@ -2402,6 +2431,7 @@ namespace pxt.blocks {
         const functionCall = pxt.blocks.getBlockDefinition(functionCallId);
 
         msg.FUNCTIONS_CALL_TITLE = functionCall.block["FUNCTIONS_CALL_TITLE"];
+        msg.FUNCTIONS_GO_TO_DEFINITION_OPTION = functionCall.block["FUNCTIONS_GO_TO_DEFINITION_OPTION"];
         installBuiltinHelpInfo(functionCallId);
         installBuiltinHelpInfo("function_call_output");
 
@@ -2634,6 +2664,27 @@ namespace pxt.blocks {
 
                 setOutputCheck(this, typeName, cachedBlockInfo);
             };
+        }
+
+        /**
+         * Make a context menu option for creating a function call block.
+         * This appears in the context menu for function definitions.
+         * @param {!Blockly.BlockSvg} block The block where the right-click originated.
+         * @return {!Object} A menu option, containing text, enabled, and a callback.
+         * @package
+         */
+        const makeCreateCallOptionOriginal = (Blockly as any).Functions.makeCreateCallOption;
+
+        // needs to exist or makeCreateCallOptionOriginal will throw an exception
+        Blockly.Msg.FUNCTIONS_CREATE_CALL_OPTION = "";
+
+        (Blockly as any).Functions.makeCreateCallOption = function (block: Blockly.Block) {
+           let option = makeCreateCallOptionOriginal(block);
+
+           let functionName = block.getField("function_name").getText();
+           option.text = Util.lf("Create 'call {0}'", functionName);
+
+           return option;
         }
     }
 
@@ -3023,5 +3074,36 @@ namespace pxt.blocks {
             model.name = newName;
             varField.setValue(model.getId());
         }
+    }
+
+
+    export function getBlockData(block: Blockly.Block): PXTBlockData {
+        if (!block.data) {
+            return {
+                commentRefs: [],
+                fieldData: {}
+            };
+        }
+        if (/^(?:\d+;?)+$/.test(block.data)) {
+            return {
+                commentRefs: block.data.split(";"),
+                fieldData: {}
+            }
+        }
+        return JSON.parse(block.data);
+    }
+
+    export function setBlockData(block: Blockly.Block, data: PXTBlockData) {
+        block.data = JSON.stringify(data);
+    }
+
+    export function setBlockDataForField(block: Blockly.Block, field: string, data: string) {
+        const blockData = getBlockData(block);
+        blockData.fieldData[field] = data;
+        setBlockData(block, blockData);
+    }
+
+    export function getBlockDataForField(block: Blockly.Block, field: string) {
+        return getBlockData(block).fieldData[field];
     }
 }

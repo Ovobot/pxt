@@ -34,11 +34,21 @@ namespace pxsim {
         public nextNotifyEvent = 1024;
 
         constructor(
-            private runtime: Runtime,
-            private valueToArgs?: EventValueToActionArgs
+            private readonly runtime: Runtime,
+            private readonly board: BaseBoard,
+            private readonly valueToArgs?: EventValueToActionArgs
         ) {
             this.schedulerID = 15; // DEVICE_ID_SCHEDULER
             this.idleEventID = 2; // DEVICE_SCHEDULER_EVT_IDLE
+
+            this.board.addMessageListener(this.handleMessage.bind(this));
+        }
+
+        private handleMessage(msg: pxsim.SimulatorMessage) {
+            if (msg.type === "eventbus") {
+                const ev = <SimulatorEventBusMessage>msg;
+                this.queue(ev.id, ev.eventid, ev.value);
+            }
         }
 
         public setBackgroundHandlerFlag() {
@@ -241,7 +251,7 @@ namespace pxsim {
         }
 
         function stopTone() {
-            if (_vca) _vca.gain.value = 0;
+            setCurrentToneGain(0);
             _frequency = 0;
             if (audio) {
                 audio.pause();
@@ -255,6 +265,25 @@ namespace pxsim {
 
         export function stop() {
             stopTone();
+            clearVca();
+        }
+
+        function clearVco() {
+            if (_vco) {
+                try {
+                    _vco.stop();
+                    _vco.disconnect();
+                } catch { }
+                _vco = undefined;
+            }
+        }
+        function clearVca() {
+            if (_vca) {
+                try {
+                    _vca.disconnect();
+                } catch { }
+                _vca = undefined;
+            }
         }
 
         export function frequency(): number {
@@ -263,6 +292,8 @@ namespace pxsim {
 
         const waveForms: OscillatorType[] = [null, "triangle", "sawtooth", "sine"]
         let noiseBuffer: AudioBuffer
+        let rectNoiseBuffer: AudioBuffer
+        let cycleNoiseBuffer: AudioBuffer[] = []
         let squareBuffer: AudioBuffer[] = []
 
         function getNoiseBuffer() {
@@ -282,6 +313,73 @@ namespace pxsim {
             return noiseBuffer
         }
 
+        function getRectNoiseBuffer() {
+            // Create a square wave filtered by a pseudorandom bit sequence.
+            // This uses four samples per cycle to create square-ish waves.
+            // The Web Audio API's frequency scaling may be using linear
+            // interpolation which would turn a two-sample wave into a triangle.
+            if (!rectNoiseBuffer) {
+                const bufferSize = 131072; // must be a multiple of 4
+                rectNoiseBuffer = context().createBuffer(1, bufferSize, context().sampleRate);
+                const output = rectNoiseBuffer.getChannelData(0);
+
+                let x = 0xf01ba80;
+                for (let i = 0; i < bufferSize; i += 4) {
+                    // see https://en.wikipedia.org/wiki/Xorshift
+                    x ^= x << 13;
+                    x ^= x >> 17;
+                    x ^= x << 5;
+                    if (x & 0x8000) {
+                        output[i] = 1.0;
+                        output[i + 1] = 1.0;
+                        output[i + 2] = -1.0;
+                        output[i + 3] = -1.0;
+                    } else {
+                        output[i] = 0.0;
+                        output[i + 1] = 0.0;
+                        output[i + 2] = 0.0;
+                        output[i + 3] = 0.0;
+                    }
+                }
+            }
+            return rectNoiseBuffer
+        }
+
+        function getCycleNoiseBuffer(bits: number) {
+            if (!cycleNoiseBuffer[bits]) {
+                // Buffer size needs to be a multiple of 4x the largest cycle length,
+                // 4*64 in this case.
+                const bufferSize = 1024;
+                const buf = context().createBuffer(1, bufferSize, context().sampleRate);
+                const output = buf.getChannelData(0);
+
+                // See pxt-common-packages's libs/mixer/melody.cpp for details.
+                // "bits" must be in the range 4..6.
+                const cycle_bits: number[] = [0x2df0eb47, 0xc8165a93];
+                const mask_456: number[] = [0xf, 0x1f, 0x3f];
+                for (let i = 0; i < bufferSize; i += 4) {
+                    let cycle: number = i / 4;
+                    let is_on: boolean;
+                    let cycle_mask = mask_456[bits - 4];
+                    cycle &= cycle_mask;
+                    is_on = (cycle_bits[cycle >> 5] & (1 << (cycle & 0x1f))) != 0;
+                    if (is_on) {
+                        output[i] = 1.0;
+                        output[i + 1] = 1.0;
+                        output[i + 2] = -1.0;
+                        output[i + 3] = -1.0;
+                    } else {
+                        output[i] = 0.0;
+                        output[i + 1] = 0.0;
+                        output[i + 2] = 0.0;
+                        output[i + 3] = 0.0;
+                    }
+                }
+                cycleNoiseBuffer[bits] = buf
+            }
+            return cycleNoiseBuffer[bits]
+        }
+
         function getSquareBuffer(param: number) {
             if (!squareBuffer[param]) {
                 const bufferSize = 1024;
@@ -298,10 +396,14 @@ namespace pxsim {
         /*
         #define SW_TRIANGLE 1
         #define SW_SAWTOOTH 2
-        #define SW_SINE 3 // TODO remove it? it takes space
+        #define SW_SINE 3
+        #define SW_TUNEDNOISE 4
         #define SW_NOISE 5
         #define SW_SQUARE_10 11
         #define SW_SQUARE_50 15
+        #define SW_SQUARE_CYCLE_16 16
+        #define SW_SQUARE_CYCLE_32 17
+        #define SW_SQUARE_CYCLE_64 18
         */
 
 
@@ -326,17 +428,24 @@ namespace pxsim {
             }
 
             let buffer: AudioBuffer
-            if (waveFormIdx == 5)
+            if (waveFormIdx == 4)
+                buffer = getRectNoiseBuffer()
+            else if (waveFormIdx == 5)
                 buffer = getNoiseBuffer()
             else if (11 <= waveFormIdx && waveFormIdx <= 15)
                 buffer = getSquareBuffer((waveFormIdx - 10) * 10)
+            else if (16 <= waveFormIdx && waveFormIdx <= 18)
+                buffer = getCycleNoiseBuffer((waveFormIdx - 16) + 4)
             else
                 return null
 
             let node = context().createBufferSource();
             node.buffer = buffer;
             node.loop = true;
-            if (waveFormIdx != 5)
+            const isFilteredNoise = waveFormIdx == 4 || (16 <= waveFormIdx && waveFormIdx <= 18);
+            if (isFilteredNoise)
+                node.playbackRate.value = hz / (context().sampleRate / 4);
+            else if (waveFormIdx != 5)
                 node.playbackRate.value = hz / (context().sampleRate / 1024);
 
             return node
@@ -417,13 +526,14 @@ namespace pxsim {
                 const endFreq = BufferMethods.getNumber(b, BufferMethods.NumberFormat.UInt16LE, idx + 10)
 
                 const isSquareWave = 11 <= soundWaveIdx && soundWaveIdx <= 15;
+                const isFilteredNoise = soundWaveIdx == 4 || (16 <= soundWaveIdx && soundWaveIdx <= 18);
                 const scaledStart = scaleVol(startVol, isSquareWave);
                 const scaledEnd = scaleVol(endVol, isSquareWave);
 
                 if (!ctx || prevStop != instrStopId)
                     return Promise.delay(duration)
 
-                if (currWave != soundWaveIdx || currFreq != freq) {
+                if (currWave != soundWaveIdx || currFreq != freq || freq != endFreq) {
                     if (ch.generator) {
                         return Promise.delay(timeOff)
                             .then(() => {
@@ -450,7 +560,8 @@ namespace pxsim {
                         } else if ((ch.generator as any).playbackRate != undefined) {
                             // If generator is an AudioBufferSourceNode
                             const param = (ch.generator as any).playbackRate as AudioParam;
-                            param.linearRampToValueAtTime(endFreq / (context().sampleRate / 1024), ctx.currentTime + ((timeOff + duration) / 1000));
+                            const bufferSamplesPerWave = isFilteredNoise ? 4 : 1024;
+                            param.linearRampToValueAtTime(endFreq / (context().sampleRate / bufferSamplesPerWave), ctx.currentTime + ((timeOff + duration) / 1000));
                         }
                     }
 
@@ -473,18 +584,13 @@ namespace pxsim {
         }
 
         export function tone(frequency: number, gain: number) {
-            if (_mute) return;
-            if (frequency <= 0) return;
+            if (frequency < 0) return;
             _frequency = frequency;
 
             let ctx = context();
             if (!ctx) return;
 
-            if (_vco) {
-                _vco.stop();
-                _vco.disconnect();
-                _vco = undefined;
-            }
+            clearVco();
 
             gain = Math.max(0, Math.min(1, gain));
             try {
@@ -493,7 +599,7 @@ namespace pxsim {
                 _vco.type = 'triangle';
                 _vco.connect(_vca);
                 _vca.connect(ctx.destination);
-                _vca.gain.value = gain;
+                setCurrentToneGain(gain);
                 _vco.start(0);
             } catch (e) {
                 _vco = undefined;
@@ -502,7 +608,13 @@ namespace pxsim {
             }
 
             _vco.frequency.value = frequency;
-            _vca.gain.value = gain;
+            setCurrentToneGain(gain);
+        }
+
+        export function setCurrentToneGain(gain: number) {
+            if (_vca?.gain) {
+                _vca.gain.value = _mute ? 0 : gain;
+            }
         }
 
         function uint8ArrayToString(input: Uint8Array) {

@@ -19,7 +19,6 @@ export const dispatchNewFrame = (index?: number) => ({ type: actions.NEW_FRAME, 
 export const dispatchDeleteFrame = (index: number) => ({ type: actions.DELETE_FRAME, index });
 export const dispatchDuplicateFrame = (index: number) => ({ type: actions.DUPLICATE_FRAME, index });
 export const dispatchChangeCurrentFrame = (index: number) => ({ type: actions.CHANGE_CURRENT_FRAME, index });
-export const dispatchChangeCurrentMainFrame = (index:number) => ({ type: actions.CHANGE_CURRENT_MAIN_FRAME, index });
 export const dispatchMoveFrame = (oldIndex: number, newIndex: number) => ({ type: actions.MOVE_FRAME, oldIndex, newIndex });
 export const dispatchChangeInterval = (newInterval: number) => ({ type: actions.CHANGE_INTERVAL, newInterval });
 export const dispatchChangePreviewAnimating = (animating: boolean) => ({ type: actions.CHANGE_PREVIEW_ANIMATING, animating });
@@ -31,16 +30,17 @@ export const dispatchHideAlert = () => ({ type: actions.HIDE_ALERT });
 
 export const dispatchSwapBackgroundForeground = () => ({ type: actions.SWAP_FOREGROUND_BACKGROUND });
 export const dispatchChangeBackgroundColor = (backgroundColor: number) => ({ type: actions.CHANGE_BACKGROUND_COLOR, backgroundColor })
-export const dispatchSetInitialFrames = (frames: pxt.sprite.ImageState[], interval: number) => ({ type: actions.SET_INITIAL_FRAMES, frames, interval });
-export const dispatchChangeMainFrames = (frames: pxt.sprite.ImageState[], interval: number) => ({ type: actions.SET_CHANGE_FRAMES, frames, interval });
 export const dispatchSetInitialState = (state: EditorState, past: AnimationState[]) => ({ type: actions.SET_INITIAL_STATE, state, past });
-export const dispatchSetInitialTilemap = (tilemap: pxt.sprite.BitmapData, tileset: pxt.TileSet, gallery: GalleryTile[], layers: pxt.sprite.BitmapData[], nextId: number, referencedTiles: string[]) => ({ type: actions.SET_INITIAL_TILEMAP, tilemap, tileset, layers, gallery, nextId, referencedTiles });
 export const dispatchChangeTilePaletteCategory = (category: TileCategory) => ({ type: actions.CHANGE_TILE_PALETTE_CATEGORY, category });
 export const dispatchChangeTilePalettePage = (page: number) => ({ type: actions.CHANGE_TILE_PALETTE_PAGE, page });
 export const dispatchChangeDrawingMode = (drawingMode: TileDrawingMode) => ({ type: actions.CHANGE_DRAWING_MODE, drawingMode });
-export const dispatchCreateNewTile = (bitmap: pxt.sprite.BitmapData, foreground: number, background: number, qualifiedName?: string) => ({ type: actions.CREATE_NEW_TILE, bitmap, foreground, background, qualifiedName });
+export const dispatchCreateNewTile = (tile: pxt.Tile, foreground: number, background: number, qualifiedName?: string) => ({ type: actions.CREATE_NEW_TILE, tile, foreground, background, qualifiedName });
 export const dispatchSetGalleryOpen = (open: boolean) => ({ type: actions.SET_GALLERY_OPEN, open })
 export const dispatchOpenTileEditor = (editIndex?: number, editID?: string) => ({ type: actions.OPEN_TILE_EDITOR, index: editIndex, id: editID })
-export const dispatchCloseTileEditor = (result?: pxt.sprite.BitmapData, index?: number) => ({ type: actions.CLOSE_TILE_EDITOR, result, index })
+export const dispatchCloseTileEditor = (result?: pxt.Tile, index?: number) => ({ type: actions.CLOSE_TILE_EDITOR, result, index })
 export const dispatchDeleteTile = (index: number, id: string) => ({ type: actions.DELETE_TILE, id, index });
 export const dispatchDisableResize = () => ({ type: actions.DISABLE_RESIZE })
+export const dispatchChangeAssetName = (name: string) => ({ type: actions.CHANGE_ASSET_NAME, name });
+
+export const dispatchOpenAsset = (asset: pxt.Asset, keepPast: boolean, gallery?: GalleryTile[]) => ({ type: actions.OPEN_ASSET, asset, keepPast, gallery })
+export const dispatchSetFrames = (frames: pxt.sprite.ImageState[]) => ({ type: actions.SET_FRAMES, frames });

@@ -336,7 +336,7 @@ namespace ts.pxtc {
         endingToken?: string;
     }
 
-    export function computeUsedParts(resp: CompileResult, ignoreBuiltin = false): string[] {
+    export function computeUsedParts(resp: CompileResult, filter?: "onlybuiltin" | "ignorebuiltin"): string[] {
         if (!resp.usedSymbols || !pxt.appTarget.simulator || !pxt.appTarget.simulator.parts)
             return [];
 
@@ -356,10 +356,15 @@ namespace ts.pxtc {
             }
         });
 
-        if (ignoreBuiltin) {
+        if (filter) {
             const builtinParts = pxt.appTarget.simulator.boardDefinition.onboardComponents;
-            if (builtinParts)
-                parts = parts.filter(p => builtinParts.indexOf(p) < 0);
+            if (builtinParts) {
+                if (filter === "ignorebuiltin") {
+                    parts = parts.filter(p => builtinParts.indexOf(p) === -1);
+                } else if (filter === "onlybuiltin") {
+                    parts = parts.filter(p => builtinParts.indexOf(p) >= 0);
+                }
+            }
         }
 
         //sort parts (so breadboarding layout is stable w.r.t. code ordering)
@@ -369,6 +374,16 @@ namespace ts.pxtc {
         // before "buttonpair"
 
         return parts;
+    }
+
+    export function buildSimJsInfo(compileResult: pxtc.CompileResult): pxtc.BuiltSimJsInfo {
+        return {
+            js: compileResult.outfiles[pxtc.BINARY_JS],
+            targetVersion: pxt.appTarget.versions.target,
+            fnArgs: compileResult.usedArguments,
+            parts: pxtc.computeUsedParts(compileResult, "ignorebuiltin"),
+            usedBuiltinParts: pxtc.computeUsedParts(compileResult, "onlybuiltin"),
+        };
     }
 
     /**
@@ -608,9 +623,10 @@ namespace ts.pxtc {
 
     export function localizeApisAsync(apis: pxtc.ApisInfo, mainPkg: pxt.MainPackage): Promise<pxtc.ApisInfo> {
         const lang = pxtc.Util.userLanguage();
-        if (pxtc.Util.userLanguage() == "en") return Promise.resolve(cleanLocalizations(apis));
 
-        const errors: pxt.Map<number> = {};
+        if (lang == "en")
+            return Promise.resolve(cleanLocalizations(apis));
+
         const langLower = lang.toLowerCase();
         const attrJsLocsKey = langLower + "|jsdoc";
         const attrBlockLocsKey = langLower + "|block";
@@ -621,6 +637,7 @@ namespace ts.pxtc {
                 const attrLocs = fn.attributes.locs || {};
                 const locJsDoc = loc[fn.qName] || attrLocs[attrJsLocsKey];
                 if (locJsDoc) {
+                    fn.attributes._untranslatedJsDoc = fn.attributes.jsDoc;
                     fn.attributes.jsDoc = locJsDoc;
                     if (fn.parameters)
                         fn.parameters.forEach(pi => pi.description = loc[`${fn.qName}|param|${pi.name}`] || attrLocs[`${langLower}|param|${pi.name}`] || pi.description);
@@ -661,14 +678,23 @@ namespace ts.pxtc {
                     } else if (fn.attributes.block && locBlock) {
                         const ps = pxt.blocks.compileInfo(fn);
                         const oldBlock = fn.attributes.block;
-                        fn.attributes.block = pxt.blocks.normalizeBlock(locBlock, err => errors[`${fn.attributes.blockId}.${lang}`] = 1);
+                        fn.attributes.block = pxt.blocks.normalizeBlock(locBlock, err => {
+                            pxt.tickEvent("loc.normalized", {
+                                block: fn.attributes.block,
+                                lang: lang,
+                                error: err,
+                            });
+                        });
                         fn.attributes._untranslatedBlock = oldBlock;
                         if (oldBlock != fn.attributes.block) {
                             updateBlockDef(fn.attributes);
                             const locps = pxt.blocks.compileInfo(fn);
                             if (!hasEquivalentParameters(ps, locps)) {
                                 pxt.log(`block has non matching arguments: ${oldBlock} vs ${fn.attributes.block}`);
-                                errors[`${fn.attributes.blockId}.${lang}`] = 2;
+                                pxt.reportError(`loc.errors`, `invalid translations`, {
+                                    block: fn.attributes.blockId,
+                                    lang: lang,
+                                });
                                 fn.attributes.block = oldBlock;
                                 updateBlockDef(fn.attributes);
                             }
@@ -679,10 +705,6 @@ namespace ts.pxtc {
                 })
             })))
             .then(() => cleanLocalizations(apis))
-            .finally(() => {
-                if (Object.keys(errors).length)
-                    pxt.reportError(`loc.errors`, `invalid translation`, errors);
-            })
     }
 
     function cleanLocalizations(apis: ApisInfo) {
@@ -1553,6 +1575,7 @@ namespace ts.pxtc.service {
         projectSearch?: ProjectSearchOptions;
         snippet?: SnippetOptions;
         runtime?: pxt.RuntimeOptions;
+        light?: boolean; // in light mode?
     }
 
     export interface SnippetOptions {

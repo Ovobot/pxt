@@ -12,6 +12,7 @@ import * as codecard from "./codecard";
 import { HintTooltip } from "./hinttooltip";
 import { PlayButton } from "./simtoolbar";
 import { ProjectView } from "./app";
+import * as editortoolbar from "./editortoolbar";
 
 type ISettingsProps = pxt.editor.ISettingsProps;
 
@@ -19,28 +20,38 @@ type ISettingsProps = pxt.editor.ISettingsProps;
  * We'll run this step when we first start the tutorial to figure out what blocks are used so we can
  * filter the toolbox.
  */
-export function getUsedBlocksAsync(code: string[], id: string, language?: string): Promise<pxt.Map<number>> {
+export function getUsedBlocksAsync(code: string[], id: string, language?: string, skipCache = false): Promise<pxt.Map<number>> {
     if (!code) return Promise.resolve({});
+
+    // check to see if usedblocks has been prebuilt. this is hashed on the tutorial code + pxt version + target version
+    if (pxt.appTarget?.tutorialInfo && !skipCache) {
+        const hash = pxt.BrowserUtils.getTutorialInfoHash(code);
+        if (pxt.appTarget.tutorialInfo[hash]) {
+            pxt.tickEvent(`tutorial.usedblocks.cached`, { tutorial: id });
+            return Promise.resolve(pxt.appTarget.tutorialInfo[hash].usedBlocks);
+        }
+    }
 
     return pxt.BrowserUtils.tutorialInfoDbAsync()
         .then(db => db.getAsync(id, code)
             .then(entry => {
-                if (entry?.blocks && Object.keys(entry.blocks).length > 0) {
+                if (entry?.blocks && Object.keys(entry.blocks).length > 0 && !skipCache) {
+                    pxt.tickEvent(`tutorial.usedblocks.indexeddb`, { tutorial: id });
                     return Promise.resolve(entry.blocks);
                 } else {
-                    return getUsedBlocksInternalAsync(code, id, language, db);
+                    return getUsedBlocksInternalAsync(code, id, language, db, skipCache);
                 }})
             .catch((err) => {
                 // fall back to full blocks decompile on error
-                return getUsedBlocksInternalAsync(code, id, language, db);
+                return getUsedBlocksInternalAsync(code, id, language, db, skipCache);
             })
         ).catch((err) => {
             // fall back to full blocks decompile on error
-            return getUsedBlocksInternalAsync(code, id, language);
+            return getUsedBlocksInternalAsync(code, id, language, null, skipCache);
         })
 }
 
-function getUsedBlocksInternalAsync(code: string[], id: string, language?: string, db?: pxt.BrowserUtils.ITutorialInfoDb): Promise<pxt.Map<number>> {
+function getUsedBlocksInternalAsync(code: string[], id: string, language?: string, db?: pxt.BrowserUtils.ITutorialInfoDb, skipCache = false): Promise<pxt.Map<number>> {
     const usedBlocks: pxt.Map<number> = {};
     return compiler.getBlocksAsync()
         .then(blocksInfo => {
@@ -61,10 +72,13 @@ function getUsedBlocksInternalAsync(code: string[], id: string, language?: strin
                     const blk = allblocks[bi];
                     if (!blk.isShadow()) usedBlocks[blk.type] = 1;
                 }
+                headless.dispose();
+
                 if (pxt.options.debug)
                     pxt.debug(JSON.stringify(usedBlocks, null, 2));
 
-                if (db) db.setAsync(id, usedBlocks, code);
+                if (db && !skipCache) db.setAsync(id, usedBlocks, code);
+                pxt.tickEvent(`tutorial.usedblocks.computed`, { tutorial: id });
                 return usedBlocks;
             } else {
                 throw new Error("Failed to decompile");
@@ -265,7 +279,7 @@ export class TutorialHint extends data.Component<ISettingsProps, TutorialHintSta
         const tutorialHint = step.hintContentMd;
         const fullText = step.contentMd;
 
-        if (!step.unplugged) {
+        if (!step.showDialog) {
             if (!tutorialHint) return <div />;
 
             return <div className={`tutorialhint no-select ${!visible ? 'hidden' : ''}`} ref={this.setRef}>
@@ -274,13 +288,14 @@ export class TutorialHint extends data.Component<ISettingsProps, TutorialHintSta
         } else {
             let onClick = tutorialStep < tutorialStepInfo.length - 1 ? this.next : this.closeHint;
             const actions: sui.ModalButton[] = [{
-                label: lf("Ok"),
+                label: lf("Start"),
                 onclick: onClick,
                 icon: 'check',
                 className: 'green'
             }]
+            const classes = this.props.parent.createModalClasses("hintdialog");
 
-            return <sui.Modal isOpen={visible} className="hintdialog"
+            return <sui.Modal isOpen={visible} className={classes}
                 closeIcon={false} header={tutorialName} buttons={actions}
                 onClose={onClick} dimmer={true} longer={true}
                 closeOnDimmerClick closeOnDocumentClick closeOnEscape>
@@ -302,6 +317,7 @@ interface TutorialCardProps extends ISettingsProps {
 export class TutorialCard extends data.Component<TutorialCardProps, TutorialCardState> {
     private prevStep: number;
     private cardHeight: number;
+    private resizeDebouncer: () => void;
 
     public focusInitialized: boolean;
 
@@ -312,7 +328,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
 
         this.state = {
             showSeeMore: false,
-            showHint: options.tutorialStepInfo[this.prevStep].fullscreen
+            showHint: options.tutorialStepInfo[this.prevStep].showHint
         }
 
         this.toggleHint = this.toggleHint.bind(this);
@@ -326,6 +342,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         this.finishTutorial = this.finishTutorial.bind(this);
         this.toggleExpanded = this.toggleExpanded.bind(this);
         this.onMarkdownDidRender = this.onMarkdownDidRender.bind(this);
+        this.handleResize = this.handleResize.bind(this);
 
     }
 
@@ -374,7 +391,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         this.props.parent.hideLightbox();
     }
 
-    componentWillUpdate() {
+    UNSAFE_componentWillUpdate() {
         document.documentElement.addEventListener("keydown", this.closeLightboxOnEscape);
     }
 
@@ -416,12 +433,19 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
             this.prevStep = step;
 
             // on "new step", sync tutorial card state. used when exiting the modal, since that bypasses the react lifecycle
-            this.setState({ showHint: options.tutorialStepInfo[step].unplugged || options.tutorialStepInfo[step].fullscreen })
+            this.setState({ showHint: options.tutorialStepInfo[step].showDialog || options.tutorialStepInfo[step].showHint })
         }
+    }
+
+    private handleResize() {
+        const options = this.props.parent.state.tutorialOptions;
+        this.setShowSeeMore(options.autoexpandStep);
     }
 
     componentDidMount() {
         this.setShowSeeMore(this.props.parent.state.tutorialOptions.autoexpandStep);
+        this.resizeDebouncer = pxt.Util.debounce(this.handleResize, 500);
+        window.addEventListener('resize', this.resizeDebouncer);
     }
 
     onMarkdownDidRender() {
@@ -437,6 +461,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         this.props.parent.stopPokeUserActivity();
 
         this.removeHintOnClick();
+        window.removeEventListener('resize', this.resizeDebouncer);
     }
 
     private removeHintOnClick() {
@@ -458,7 +483,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         const { tutorialReady, tutorialStepInfo, tutorialStep } = options;
         if (!tutorialReady) return false;
         return !!tutorialStepInfo[tutorialStep].hintContentMd
-            || tutorialStepInfo[tutorialStep].unplugged;
+            || tutorialStepInfo[tutorialStep].showDialog;
     }
 
     private hintOnClick(evt?: any) {
@@ -470,11 +495,11 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         if (evt) evt.stopPropagation();
         const { tutorialStepInfo, tutorialStep } = options;
         const step = tutorialStepInfo[tutorialStep];
-        const unplugged = tutorialStep < tutorialStepInfo.length - 1 && step && !!step.unplugged;
+        const showDialog = tutorialStep < tutorialStepInfo.length - 1 && step && !!step.showDialog;
 
         this.props.parent.clearUserPoke();
 
-        if (!unplugged) {
+        if (!showDialog) {
             this.toggleHint();
         }
     }
@@ -488,7 +513,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         const tutorialCard = this.refs['tutorialmessage'] as HTMLElement;
         let show = false;
         if (tutorialCard && tutorialCard.firstElementChild && tutorialCard.firstElementChild.firstElementChild) {
-            show = tutorialCard.clientHeight < tutorialCard.firstElementChild.firstElementChild.scrollHeight;
+            show = tutorialCard.clientHeight <= tutorialCard.firstElementChild.firstElementChild.scrollHeight;
             if (show) {
                 this.cardHeight = tutorialCard.firstElementChild.firstElementChild.scrollHeight;
                 if (autoexpand) this.props.parent.setTutorialInstructionsExpanded(true);
@@ -520,6 +545,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
 
         const th = this.refs["tutorialhint"] as TutorialHint;
         if (!th) return;
+        const currentStep = this.props.parent.state.tutorialOptions.tutorialStep;
 
         if (!visible) {
             if (th.elementRef) th.elementRef.removeEventListener('click', this.expandedHintOnClick);
@@ -531,9 +557,10 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
             this.props.parent.stopPokeUserActivity();
 
             const options = this.props.parent.state.tutorialOptions;
-            if (!options.tutorialStepInfo[options.tutorialStep].unplugged)
+            if (!options.tutorialStepInfo[options.tutorialStep].showDialog)
                 document.addEventListener('click', this.closeHint); // add close listener if not modal
             pxt.tickEvent(`tutorial.showhint`, { tutorial: options.tutorial, step: options.tutorialStep });
+            this.props.parent.setHintSeen(currentStep);
         }
         th.showHint(visible, showFullText);
     }
@@ -553,7 +580,7 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
         const hasFinish = !lockedEditor && currentStep == maxSteps - 1 && !hideIteration;
         const hasHint = this.hasHint();
         const tutorialCardContent = stepInfo.headerContentMd;
-        const unplugged = stepInfo.unplugged;
+        const showDialog = stepInfo.showDialog;
 
         let tutorialAriaLabel = '',
             tutorialHintTooltip = '';
@@ -564,25 +591,25 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
 
         let hintOnClick = this.hintOnClick;
         // double-click issue on edge when closing hint from tutorial card click
-        if ((pxt.BrowserUtils.isEdge() || pxt.BrowserUtils.isIE()) && this.state.showHint && !unplugged) {
+        if ((pxt.BrowserUtils.isEdge() || pxt.BrowserUtils.isIE()) && this.state.showHint && !showDialog) {
             hintOnClick = null;
         }
 
         const isRtl = pxt.Util.isUserLanguageRtl();
         return <div id="tutorialcard" className={`ui ${tutorialStepExpanded ? 'tutorialExpanded' : ''} ${tutorialReady ? 'tutorialReady' : ''} ${this.state.showSeeMore ? 'seemore' : ''}  ${!this.state.showHint ? 'showTooltip' : ''} ${hasHint ? 'hasHint' : ''}`} style={tutorialStepExpanded ? this.getExpandedCardStyle('height') : null} >
-            {hasHint && this.state.showHint && !unplugged && <div className="mask" role="region" onClick={this.closeHint}></div>}
+            {hasHint && this.state.showHint && !showDialog && <div className="mask" role="region" onClick={this.closeHint}></div>}
             <div className='ui buttons'>
                 {hasPrevious ? <sui.Button icon={`${isRtl ? 'right' : 'left'} chevron large`} className={`prevbutton left attached ${!hasPrevious ? 'disabled' : ''}`} text={lf("Back")} textClass="widedesktop only" ariaLabel={lf("Go to the previous step of the tutorial.")} onClick={this.previousTutorialStep} onKeyDown={sui.fireClickOnEnter} /> : undefined}
                 <div className="ui segment attached tutorialsegment">
                     <div ref="tutorialmessage" className={`tutorialmessage`} role="alert" aria-label={tutorialAriaLabel} tabIndex={hasHint ? 0 : -1}
                         onClick={hasHint ? hintOnClick : undefined} onKeyDown={hasHint ? sui.fireClickOnEnter : undefined}>
                         <div className="content">
-                            {!unplugged && <md.MarkedContent className="no-select" markdown={tutorialCardContent} parent={this.props.parent} onDidRender={this.onMarkdownDidRender} />}
+                            {!showDialog && <md.MarkedContent className="no-select" markdown={tutorialCardContent} parent={this.props.parent} onDidRender={this.onMarkdownDidRender} />}
                         </div>
                     </div>
                     <div className="avatar-container">
-                        {(!unplugged && hasHint) && <sui.Button className={`ui circular label blue hintbutton hidelightbox ${hasHint && this.props.pokeUser ? 'shake flash' : ''}`} icon="lightbulb outline" tabIndex={-1} onClick={hintOnClick} onKeyDown={sui.fireClickOnEnter} />}
-                        {(!unplugged && hasHint) && <HintTooltip ref="hinttooltip" pokeUser={this.props.pokeUser} text={tutorialHintTooltip} onClick={hintOnClick} />}
+                        {(!showDialog && hasHint) && <sui.Button className={`ui circular label blue hintbutton hidelightbox ${hasHint && this.props.pokeUser ? 'shake flash' : ''}`} icon="lightbulb outline" tabIndex={-1} onClick={hintOnClick} onKeyDown={sui.fireClickOnEnter} />}
+                        {(!showDialog && hasHint) && <HintTooltip ref="hinttooltip" pokeUser={this.props.pokeUser} text={tutorialHintTooltip} onClick={hintOnClick} />}
                         <TutorialHint ref="tutorialhint" parent={this.props.parent} />
                     </div>
                     {this.state.showSeeMore && !tutorialStepExpanded && <sui.Button className="fluid compact lightgrey" icon="chevron down" tabIndex={0} text={lf("More...")} onClick={this.toggleExpanded} onKeyDown={sui.fireClickOnEnter} />}
@@ -596,18 +623,46 @@ export class TutorialCard extends data.Component<TutorialCardProps, TutorialCard
     }
 }
 
-export class WorkspaceHeader extends data.Component<any, {}> {
+interface WorkspaceHeaderState {
+    windowSize?: number;
+}
+
+export class WorkspaceHeader extends data.Component<any, WorkspaceHeaderState> {
     private flyoutWidth: number = 0;
     private flyoutTitle: string = lf("Toolbox");
-    private workspaceTitle: string = lf("Workspace");
+    private workspaceWidth: number = 0;
     constructor(props: any) {
         super(props);
+
+        this.handleResize = this.handleResize.bind(this);
+        this.state = {windowSize: window.innerWidth};
     }
 
-    componentWillUpdate() {
-        let flyout = document.querySelector('.blocklyFlyout');
+    handleResize() {
+        this.setState({windowSize: window.innerWidth});
+    }
+
+    componentDidMount() {
+        window.addEventListener('resize', this.handleResize);
+        window.addEventListener('wheel', this.handleResize);
+        window.addEventListener('pointermove', this.handleResize);
+    }
+
+    componentWillUnmount() {
+        window.removeEventListener('resize', this.handleResize);
+        window.removeEventListener('wheel', this.handleResize);
+        window.removeEventListener('pointermove', this.handleResize);
+    }
+
+    UNSAFE_componentWillUpdate() {
+        const flyout = document.querySelector('.blocklyFlyout');
         if (flyout) {
-            this.flyoutWidth = flyout.clientWidth;
+            this.flyoutWidth = flyout.getBoundingClientRect().width;
+        }
+
+        const workspace = document.querySelector('#blocksArea');
+        if (workspace) {
+            this.workspaceWidth = workspace.clientWidth - this.flyoutWidth - 4;
         }
     }
 
@@ -617,10 +672,20 @@ export class WorkspaceHeader extends data.Component<any, {}> {
         }
     }
 
+    private workspaceStyle() {
+        return {
+            width: this.workspaceWidth
+        }
+    }
+
     renderCore() {
         return <div id="headers">
-            <div id="flyoutHeader" style={this.headerStyle()}>{this.flyoutTitle}</div>
-            <div id="workspaceHeader">{this.workspaceTitle}</div>
+            <div id="flyoutHeader" style={this.headerStyle()}>
+                <div id="flyoutHeaderTitle" className="no-select">{this.flyoutTitle}</div>
+            </div>
+            <div id="workspaceHeader" style={this.workspaceStyle()}>
+                <editortoolbar.SmallEditorToolbar parent={this.props.parent}/>
+            </div>
         </div>;
     }
 }

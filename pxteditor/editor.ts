@@ -83,7 +83,6 @@ namespace pxt.editor {
         pokeUserComponent?: string;
         flashHint?: boolean;
 
-        highContrast?: boolean;
         print?: boolean;
         greenScreen?: boolean;
         accessibleBlocks?: boolean;
@@ -188,6 +187,7 @@ namespace pxt.editor {
         openBlocks(): void;
         openJavaScript(giveFocusOnLoading?: boolean): void;
         openPython(giveFocusOnLoading?: boolean): void;
+        openAssets(): void;
         openSettings(): void;
         openSimView(): void;
         openSimSerial(): void;
@@ -200,6 +200,8 @@ namespace pxt.editor {
         saveBlocksToTypeScriptAsync(): Promise<string>;
 
         saveFileAsync(): Promise<void>;
+        saveCurrentSourceAsync(): Promise<void>;
+        saveProjectAsync(): Promise<void>;
         loadHeaderAsync(h: pxt.workspace.Header): Promise<void>;
         reloadHeaderAsync(): Promise<void>;
         importProjectAsync(prj: pxt.workspace.Project, editorState?: pxt.editor.EditorState): Promise<void>;
@@ -215,11 +217,10 @@ namespace pxt.editor {
         importExampleAsync(options: ExampleImportOptions): Promise<void>;
         showScriptManager(): void;
         importProjectDialog(): void;
-        cloudSync(): boolean;
-        cloudSignInDialog(): void;
-        cloudSignOut(): void;
         removeProject(): void;
         editText(): void;
+
+        hasCloudSync(): boolean;
 
         getPreferredEditor(): string;
         saveAndCompile(): void;
@@ -246,6 +247,7 @@ namespace pxt.editor {
         pokeUserActivity(): void;
         stopPokeUserActivity(): void;
         clearUserPoke(): void;
+        setHintSeen(step: number): void;
 
         anonymousPublishAsync(screenshotUri?: string): Promise<string>;
 
@@ -281,7 +283,7 @@ namespace pxt.editor {
         typecheckNow(): void;
         shouldPreserveUndoStack(): boolean;
 
-        openExtension(extension: string, url: string, consentRequired?: boolean): void;
+        openExtension(extension: string, url: string, consentRequired?: boolean, trusted?: boolean): void;
         handleExtensionRequest(request: ExtensionRequest): void;
 
         fireResize(): void;
@@ -299,6 +301,7 @@ namespace pxt.editor {
         toggleAccessibleBlocks(): void;
         setAccessibleBlocks(enabled: boolean): void;
         launchFullEditor(): void;
+        resetWorkspace(): void;
 
         settings: EditorSettings;
 
@@ -306,10 +309,11 @@ namespace pxt.editor {
         isBlocksActive(): boolean;
         isJavaScriptActive(): boolean;
         isPythonActive(): boolean;
+        isAssetsActive(): boolean;
 
         editor: IEditor;
 
-        startActivity(activitity: Activity, path: string, title?: string, editor?: string): void;
+        startActivity(activitity: Activity, path: string, title?: string, editor?: string, focus?: boolean, opts?: pxt.editor.ExampleImportOptions): void;
         showLightbox(): void;
         hideLightbox(): void;
         showKeymap(show: boolean): void;
@@ -319,6 +323,9 @@ namespace pxt.editor {
         showLanguagePicker(): void;
         showShareDialog(title?: string): void;
         showAboutDialog(): void;
+
+        showLoginDialog(continuationHash?: string): void;
+        showProfileDialog(location?: string): void;
 
         showImportUrlDialog(): void;
         showImportFileDialog(options?: ImportFileOptions): void;
@@ -334,6 +341,7 @@ namespace pxt.editor {
         checkForHwVariant(): boolean;
         pairAsync(): Promise<void>;
 
+        createModalClasses(classes?: string): string;
         showModalDialogAsync(options: ModalDialogOptions): Promise<void>;
 
         askForProjectCreationOptionsAsync(): Promise<ProjectCreationOptions>;

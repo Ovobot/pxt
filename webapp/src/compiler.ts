@@ -70,7 +70,9 @@ function reportDiagnosticErrors(errors: pxtc.KsDiagnostic[]) {
         errors.filter(err => err.code).forEach(err => counts[err.code] = (counts[err.code] || 0) + 1);
         const errorCounts = JSON.stringify(errors);
         if (errorCounts !== lastErrorCounts) {
-            pxt.tickEvent("diagnostics", counts);
+            for (const errorCode of Object.keys(counts)) {
+                pxt.tickEvent("diagnostics", { errorCode, count: counts[errorCode] });
+            }
             lastErrorCounts = errorCounts;
         }
     } else {
@@ -132,7 +134,7 @@ export function emptyCompileResult(): pxtc.CompileResult {
 export function compileAsync(options: CompileOptions = {}): Promise<pxtc.CompileResult> {
     let trg = pkg.mainPkg.getTargetOptions()
     trg.isNative = options.native
-    return pkg.mainEditorPkg().buildTilemapsAsync()
+    return pkg.mainEditorPkg().buildAssetsAsync()
         .then(() => pkg.mainPkg.getCompileOptionsAsync(trg))
         .then(opts => {
             if (options.debug) {
@@ -226,13 +228,14 @@ export function py2tsAsync(force = false): Promise<pxtc.transpile.TranspileResul
         })
 }
 
-export function completionsAsync(fileName: string, position: number, wordStartPos: number, wordEndPos: number, fileContent?: string): Promise<pxtc.CompletionInfo> {
+export function completionsAsync(fileName: string, position: number, wordStartPos: number, wordEndPos: number, fileContent?: string, light?: boolean): Promise<pxtc.CompletionInfo> {
     return workerOpAsync("getCompletions", {
         fileName,
         fileContent,
         position,
         wordStartPos,
         wordEndPos,
+        light,
         runtime: pxt.appTarget.runtime
     });
 }
@@ -317,6 +320,8 @@ export function pySnippetToBlocksAsync(code: string, blockInfo?: ts.pxtc.BlocksI
 // Py[] -> blocks
 export function pySnippetArrayToBlocksAsync(code: string[], blockInfo?: ts.pxtc.BlocksInfo): Promise<pxtc.CompileResult> {
     const namespaceRegex = /^\s*namespace\s+[^\s]+\s*{([\S\s]*)}\s*$/im;
+    const exportLetRegex = /^\s*export\s(let\s*[\S\s]*)\s*$/im;
+    const exportFunctionRegex = /^\s*export\s(function\s*[\S\s]*)\s*$/im;
     const snippetBlocks = "main.blocks";
     let trg = pkg.mainPkg.getTargetOptions()
     let files: string[] = [];
@@ -341,7 +346,22 @@ export function pySnippetArrayToBlocksAsync(code: string[], blockInfo?: ts.pxtc.
             let ts = "";
             for (let file of files) {
                 let match = res.outfiles[file + ".ts"].match(namespaceRegex);
-                if (match && match[1]) ts += `{\n${match[1]}\n}\n`
+                if (match && match[1]) {
+                    const noNamespace = match[1];
+                    // strip out 'export let' and 'export function'. This won't hit custom kinds since those are always const
+                    let lines = noNamespace.split("\n");
+                    let cleanLines = lines.map((element: string) => {
+                        const matchExportLet = element.match(exportLetRegex);
+                        const strippedExportLet = matchExportLet ? matchExportLet[1] : element;
+                        const strippedExportFunc = strippedExportLet.match(exportFunctionRegex);
+                        if (strippedExportFunc) {
+                            return strippedExportFunc[1];
+                        } else {
+                            return strippedExportLet;
+                        }
+                    })
+                    ts += `{\n${cleanLines.join("\n")}\n}\n`;
+                }
             }
             return decompileBlocksSnippetAsync(ts, blockInfo)
         });
@@ -484,7 +504,7 @@ export function snippetAsync(qName: string, python?: boolean): Promise<string> {
 
 export function typecheckAsync() {
     const epkg = pkg.mainEditorPkg();
-    let p = epkg.buildTilemapsAsync()
+    let p = epkg.buildAssetsAsync()
         .then(() => pkg.mainPkg.getCompileOptionsAsync())
         .then(opts => {
             opts.testMode = true // show errors in all top-level code
@@ -546,9 +566,21 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
     const corePkg = bundled[corePkgName];
     if (!corePkg) return null;
 
-    // If the project has a TypeScript file beside main.ts, it could export blocks so we can't use the cache
+    // If the project has a TypeScript file beside one of the generated files, it could export blocks so we can't use the cache
     const files = project.getAllFiles();
-    if (Object.keys(files).some(filename => filename != "main.ts" && filename.indexOf("/") === -1 && pxt.Util.endsWith(filename, ".ts"))) {
+    const generatedFiles = [
+        "main.ts",
+        pxt.TUTORIAL_CODE_START,
+        pxt.TUTORIAL_CODE_STOP,
+        pxt.TILEMAP_CODE,
+        pxt.IMAGES_CODE
+    ];
+
+    if (Object.keys(files).some(
+            filename => generatedFiles.indexOf(filename) === -1
+            && filename.indexOf("/") === -1
+            && pxt.Util.endsWith(filename, ".ts")
+        )) {
         return null;
     }
 
@@ -576,7 +608,7 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
 
         let foundIt = false;
         for (const bundle of bundledPackages) {
-            if (bundle.config.name === dep.getKsPkg().config.name) {
+            if (bundle.config.name === getPackageKey(dep)) {
                 usedPackageInfo.push({
                     dirname: bundle.dirname,
                     info: bundled[bundle.dirname]
@@ -596,13 +628,13 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
             const entry = await db.getAsync(dep);
 
             if (!entry) {
-                pxt.debug(`Could not find cached API info for ${dep.getKsPkg().config.name}, waiting for full compile`);
+                pxt.debug(`Could not find cached API info for ${getPackageKey(dep)}, waiting for full compile`);
                 return null;
             }
             else {
-                pxt.debug(`Fetched cached API info for ${dep.getKsPkg().config.name}`);
+                pxt.debug(`Fetched cached API info for ${getPackageKey(dep)}`);
                 usedPackageInfo.push({
-                    dirname: dep.getKsPkg().config.name,
+                    dirname: dep.getPkgId(),
                     info: entry
                 });
             }
@@ -630,8 +662,6 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
 
     const jres = pkg.mainPkg.getJRes();
 
-    const jani = pkg.mainPkg.getFrames();
-
     for (const qName of Object.keys(result.byQName)) {
         let si = result.byQName[qName]
 
@@ -647,14 +677,6 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
             }
         }
 
-        let frames = si.attributes.frames
-        if(frames){
-            if(frames == "true") frames = qName
-            let ja = U.lookup(jani || {}, frames)
-            si.attributes.frameImages = ja.data;
-            
-        }
-
     }
 
     return result;
@@ -662,30 +684,66 @@ async function getCachedApiInfoAsync(project: pkg.EditorPackage, bundled: pxt.Ma
 
 async function cacheApiInfoAsync(project: pkg.EditorPackage, info: pxtc.ApisInfo) {
     const corePkgs = pxt.Package.corePackages().map(pkg => pkg.name);
-    const externalPackages = project.pkgAndDeps().filter(p => p.id !== "built" && !p.isTopLevel() && corePkgs.indexOf(p.getKsPkg().config.name) === -1);
+    const externalPackages = project.pkgAndDeps()
+            .filter(p => p.id !== "built"
+                        && !p.isTopLevel()
+                        && corePkgs.indexOf(p.getPkgId()) === -1);
 
     if (externalPackages.length) {
         const apiList = Object.keys(info.byQName);
         const db = await ApiInfoIndexedDb.createAsync();
 
         for (const dep of externalPackages) {
-            const name = dep.getKsPkg().config.name;
+            const pkgId = dep.getPkgId();
+
             const entry: pxt.PackageApiInfo = {
                 sha: null,
                 apis: { byQName: {} }
             }
 
-
             for (const api of apiList) {
-                if (info.byQName[api].pkg === name) {
-                    entry.apis.byQName[api] = info.byQName[api];
+                const apiInfo = info.byQName[api];
+
+                // We include an API in the list of APIs for an external package in two cases:
+                //  1. If the API's package ID is the same as the external package
+                //  2. If any of the package IDs in the list of packages that defined the API are the same as the external package
+                if (apiInfo.pkg === pkgId || apiInfo.pkgs?.find(element => element === pkgId)) {
+                    entry.apis.byQName[api] = cleanApiForCache(apiInfo);
                 }
             }
 
             await db.setAsync(dep, entry);
-            pxt.debug(`Stored API info for ${dep}`);
+            pxt.debug(`Stored API info for ${getPackageKey(dep)}`);
         }
     }
+}
+
+function cleanApiForCache(apiInfo: pxtc.SymbolInfo) {
+    // Create a copy of the API info since we want to remove the package list.
+    // Most info objects won't have a package list
+    const cachedEntry = U.clone(apiInfo);
+
+    // strip the pkg array to not store duplicate info
+    delete cachedEntry.pkgs;
+
+    // clear translations on blocks before caching
+    const cachedAttrs = U.clone(cachedEntry.attributes)
+    let defChanged = false;
+    if (cachedAttrs._untranslatedBlock) {
+        cachedAttrs.block = cachedAttrs._untranslatedBlock;
+        delete cachedAttrs._untranslatedBlock;
+        defChanged = true;
+    }
+    if (cachedAttrs._untranslatedJsDoc) {
+        cachedAttrs.jsDoc = cachedAttrs._untranslatedJsDoc;
+        delete cachedAttrs._untranslatedJsDoc;
+        defChanged = true;
+    }
+    if (defChanged) {
+        ts.pxtc.updateBlockDef(cachedAttrs);
+    }
+    cachedEntry.attributes = cachedAttrs;
+    return cachedEntry;
 }
 
 export interface UpgradeResult {
@@ -770,7 +828,7 @@ function upgradeFromBlocksAsync(): Promise<UpgradeResult> {
         })
         .then(res => {
             patchedFiles["main.ts"] = res.source;
-            return project.buildTilemapsAsync();
+            return project.buildAssetsAsync();
         })
         .then(() => {
             const compiledFiles = project.getAllFiles();
@@ -832,7 +890,7 @@ interface UpgradeError extends Error {
 
 function checkPatchAsync(patchedFiles?: pxt.Map<string>) {
     const mainPkg = pkg.mainPkg;
-    return pkg.mainEditorPkg().buildTilemapsAsync()
+    return pkg.mainEditorPkg().buildAssetsAsync()
         .then(() => mainPkg.getCompileOptionsAsync())
         .then(opts => {
             if (patchedFiles) {
@@ -967,7 +1025,15 @@ function getPackageHash(pack: pkg.EditorPackage) {
 }
 
 function getPackageKey(pack: pkg.EditorPackage) {
-    return pack.getKsPkg().config.name;
+    const ksPkg = pack.getKsPkg();
+    const verspec = ksPkg._verspec;
+    if (pxt.github.isGithubId(verspec)) {
+        // only cache one version of repo; drop #tag
+        const slug = /^([^#]+)/.exec(verspec);
+        return slug[1];
+    } else {
+        return ksPkg.config.name;
+    }
 }
 
 interface ApiInfoIndexedDbEntry {
@@ -1038,4 +1104,19 @@ class ApiInfoIndexedDb {
                 pxt.perf.measureEnd("compiler db setAsync")
             })
     }
+
+    clearAsync(): Promise<void> {
+        return this.db.deleteAllAsync(ApiInfoIndexedDb.TABLE)
+            .then(() => console.debug(`db: all clean`))
+            .catch(e => {
+                console.error('db: failed to delete all');
+            })
+    }
+}
+
+export function clearApiInfoDbAsync() {
+    return ApiInfoIndexedDb.createAsync()
+        .then(db => db.clearAsync())
+        .catch(e => pxt.BrowserUtils.IDBWrapper.deleteDatabaseAsync(ApiInfoIndexedDb.dbName()).done());
+
 }

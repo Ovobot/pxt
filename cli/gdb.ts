@@ -485,13 +485,16 @@ export async function dumpheapAsync(filename?: string) {
             pointerClassification[hex(ptr)] = "codal::EventQueueItem"
         }
 
-        for (let ptr = read32(findAddr("pxt::handlerBindings")); ptr; ptr = read32(ptr)) {
-            pointerClassification[hex(ptr)] = "pxt::HandlerBinding"
-        }
+        const handler = findAddr("pxt::handlerBindings", true)
+        if (handler)
+            for (let ptr = read32(handler); ptr; ptr = read32(ptr)) {
+                pointerClassification[hex(ptr)] = "pxt::HandlerBinding"
+            }
     }
 
     console.log(`heaps at ${hex(heapDesc)}, num=${heapNum}`)
     let cnts: pxt.Map<number> = {}
+    let examples: pxt.Map<number[]> = {}
     let fiberSize = 0
     for (let i = 0; i < heapNum; ++i) {
         let heapStart = read32(heapDesc + i * heapSz)
@@ -512,9 +515,12 @@ export async function dumpheapAsync(filename?: string) {
             if (U.startsWith(classification, "Fiber/"))
                 fiberSize += blockSize * 4
             let mark = `[${isFree ? "F" : "U"}:${blockSize * 4} / ${classification}]`
-            if (!cnts[mark])
+            if (!cnts[mark]) {
                 cnts[mark] = 0
+                examples[mark] = []
+            }
             cnts[mark] += blockSize * 4
+            examples[mark].push(block)
 
             if (isFree)
                 totalFreeBlock += blockSize;
@@ -530,7 +536,8 @@ export async function dumpheapAsync(filename?: string) {
         let keys = Object.keys(cnts)
         keys.sort((a, b) => cnts[b] - cnts[a])
         for (let k of keys) {
-            console.log(`${cnts[k]}\t${k}`)
+            U.randomPermute(examples[k])
+            console.log(`${cnts[k]}\t${k}\t${examples[k].slice(0, 6).map(p => p.toString(16)).join(", ")}`)
         }
     }
 
@@ -1006,7 +1013,7 @@ export async function startAsync(gdbArgs: string[]) {
         trg += "\nmonitor swdp_scan\nattach 1"
         pxt.log("Using Black Magic Probe at " + bmpPort)
         monReset = "run"
-        monResetHalt = "run"
+        monResetHalt = "set {int}0xE000ED0C = 0x05fa0004" // NVIC_SystemReset()
     }
 
     let mapsrc = ""

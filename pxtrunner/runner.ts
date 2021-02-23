@@ -10,10 +10,14 @@ namespace pxt.runner {
     export interface SimulateOptions {
         id?: string;
         code?: string;
+        assets?: string;
         highContrast?: boolean;
         light?: boolean;
         fullScreen?: boolean;
-        dependencies?: string[]
+        dependencies?: string[];
+        builtJsInfo?: pxtc.BuiltSimJsInfo;
+        // single simulator frame, no message simulators
+        single?: boolean;
     }
 
     class EditorPackage {
@@ -53,8 +57,6 @@ namespace pxt.runner {
         }
 
         writeFile(module: pxt.Package, filename: string, contents: string): void {
-            if (filename == pxt.CONFIG_NAME)
-                return; // ignore config writes
             const epkg = getEditorPkg(module);
             epkg.files[filename] = contents;
         }
@@ -350,53 +352,115 @@ namespace pxt.runner {
             })
     }
 
-    export function simulateAsync(container: HTMLElement, simOptions: SimulateOptions) {
-        return loadPackageAsync(simOptions.id, simOptions.code, simOptions.dependencies)
-            .then(() => compileAsync(false, opts => {
+    export async function simulateAsync(container: HTMLElement, simOptions: SimulateOptions): Promise<pxtc.BuiltSimJsInfo> {
+        const builtSimJS = simOptions.builtJsInfo || await buildSimJsInfo(simOptions);
+        const {
+            js,
+            fnArgs,
+            parts,
+            usedBuiltinParts,
+        } = builtSimJS;
+
+        if (!js) {
+            console.error("Program failed to compile");
+            return undefined;
+        }
+
+        let options: pxsim.SimulatorDriverOptions = {};
+        options.onSimulatorCommand = msg => {
+            if (msg.command === "restart") {
+                runOptions.storedState = getStoredState(simOptions.id)
+                driver.run(js, runOptions);
+            }
+            if (msg.command == "setstate") {
+                if (msg.stateKey && msg.stateValue) {
+                    setStoredState(simOptions.id, msg.stateKey, msg.stateValue)
+                }
+            }
+        };
+        options.messageSimulators = pxt.appTarget?.simulator?.messageSimulators;
+        let driver = new pxsim.SimulatorDriver(container, options);
+
+        let board = pxt.appTarget.simulator.boardDefinition;
+        let storedState: Map<string> = getStoredState(simOptions.id)
+        let runOptions: pxsim.SimulatorRunOptions = {
+            boardDefinition: board,
+            parts: parts,
+            builtinParts: usedBuiltinParts,
+            fnArgs: fnArgs,
+            cdnUrl: pxt.webConfig.commitCdnUrl,
+            localizedStrings: Util.getLocalizedStrings(),
+            highContrast: simOptions.highContrast,
+            storedState: storedState,
+            light: simOptions.light,
+            single: simOptions.single,
+        };
+        if (pxt.appTarget.simulator && !simOptions.fullScreen)
+            runOptions.aspectRatio = parts.length && pxt.appTarget.simulator.partsAspectRatio
+                ? pxt.appTarget.simulator.partsAspectRatio
+                : pxt.appTarget.simulator.aspectRatio;
+        driver.run(js, runOptions);
+        return builtSimJS;
+    }
+
+    export async function buildSimJsInfo(simOptions: SimulateOptions): Promise<pxtc.BuiltSimJsInfo> {
+        await loadPackageAsync(simOptions.id, simOptions.code, simOptions.dependencies);
+
+        let didUpgrade = false;
+        const currentTargetVersion = pxt.appTarget.versions.target;
+        let compileResult = await compileAsync(false, opts => {
+            if (simOptions.assets) {
+                const parsedAssets = JSON.parse(simOptions.assets);
+                for (const key of Object.keys(parsedAssets)) {
+                    const el = parsedAssets[key];
+                    opts.fileSystem[key] = el;
+                    if (opts.sourceFiles.indexOf(key) < 0) {
+                        opts.sourceFiles.push(key);
+                    }
+                    if (/\.jres$/.test(key)) {
+                        const parsedJres = JSON.parse(el)
+                        opts.jres = pxt.inflateJRes(parsedJres, opts.jres);
+                    }
+                }
+            }
+            if (simOptions.code) opts.fileSystem["main.ts"] = simOptions.code;
+
+            // Api info needed for py2ts conversion, if project is shared in Python
+            if (opts.target.preferredEditor === pxt.PYTHON_PROJECT_NAME) {
+                opts.target.preferredEditor = pxt.JAVASCRIPT_PROJECT_NAME;
+                opts.ast = true;
+                const resp = pxtc.compile(opts);
+                const apis = getApiInfo(resp.ast, opts);
+                opts.apisInfo = apis;
+                opts.target.preferredEditor = pxt.PYTHON_PROJECT_NAME;
+            }
+
+            // Apply upgrade rules if necessary
+            const sharedTargetVersion = mainPkg.config.targetVersions?.target;
+
+            if (sharedTargetVersion && currentTargetVersion &&
+                pxt.semver.cmp(pxt.semver.parse(sharedTargetVersion), pxt.semver.parse(currentTargetVersion)) < 0) {
+                for (const fileName of Object.keys(opts.fileSystem)) {
+                    if (!pxt.Util.startsWith(fileName, "pxt_modules") && pxt.Util.endsWith(fileName, ".ts")) {
+                        didUpgrade = true;
+                        opts.fileSystem[fileName] = pxt.patching.patchJavaScript(sharedTargetVersion, opts.fileSystem[fileName]);
+                    }
+                }
+            }
+        });
+
+        if (compileResult.diagnostics?.length > 0 && didUpgrade) {
+            pxt.log("Compile with upgrade rules failed, trying again with original code");
+            compileResult = await compileAsync(false, opts => {
                 if (simOptions.code) opts.fileSystem["main.ts"] = simOptions.code;
-            }))
-            .then(resp => {
-                if (resp.diagnostics && resp.diagnostics.length > 0) {
-                    console.error("Diagnostics", resp.diagnostics)
-                }
-                let js = resp.outfiles[pxtc.BINARY_JS];
-                if (js) {
-                    let options: pxsim.SimulatorDriverOptions = {};
-                    options.onSimulatorCommand = msg => {
-                        if (msg.command === "restart") {
-                            runOptions.storedState = getStoredState(simOptions.id)
-                            driver.run(js, runOptions);
-                        }
-                        if (msg.command == "setstate") {
-                            if (msg.stateKey && msg.stateValue) {
-                                setStoredState(simOptions.id, msg.stateKey, msg.stateValue)
-                            }
-                        }
-                    };
+            });
+        }
 
-                    let driver = new pxsim.SimulatorDriver(container, options);
+        if (compileResult.diagnostics && compileResult.diagnostics.length > 0) {
+            console.error("Diagnostics", compileResult.diagnostics);
+        }
 
-                    let fnArgs = resp.usedArguments;
-                    let board = pxt.appTarget.simulator.boardDefinition;
-                    let parts = pxtc.computeUsedParts(resp, true);
-                    let storedState: Map<string> = getStoredState(simOptions.id)
-                    let runOptions: pxsim.SimulatorRunOptions = {
-                        boardDefinition: board,
-                        parts: parts,
-                        fnArgs: fnArgs,
-                        cdnUrl: pxt.webConfig.commitCdnUrl,
-                        localizedStrings: Util.getLocalizedStrings(),
-                        highContrast: simOptions.highContrast,
-                        storedState: storedState,
-                        light: simOptions.light
-                    };
-                    if (pxt.appTarget.simulator && !simOptions.fullScreen)
-                        runOptions.aspectRatio = parts.length && pxt.appTarget.simulator.partsAspectRatio
-                            ? pxt.appTarget.simulator.partsAspectRatio
-                            : pxt.appTarget.simulator.aspectRatio;
-                    driver.run(js, runOptions);
-                }
-            })
+        return pxtc.buildSimJsInfo(compileResult);
     }
 
     function getStoredState(id: string) {
@@ -767,19 +831,20 @@ ${linkString}
             .then(summary => {
                 toc = pxt.docs.buildTOC(summary);
                 pxt.log(`TOC: ${JSON.stringify(toc, null, 2)}`)
-                const tocsp: Promise<void>[] = [];
+                const tocsp: TOCMenuEntry[] = [];
                 pxt.docs.visitTOC(toc, entry => {
-                    if (!/^\//.test(entry.path) || /^\/pkg\//.test(entry.path)) return;
-                    tocsp.push(
-                        pxt.Cloud.markdownAsync(entry.path)
-                            .then(md => {
-                                entry.markdown = md;
-                            }, e => {
-                                entry.markdown = `_${entry.path} failed to load._`;
-                            })
-                    )
+                    if (/^\//.test(entry.path) && !/^\/pkg\//.test(entry.path))
+                        tocsp.push(entry);
                 });
-                return Promise.all(tocsp);
+
+                return U.promisePoolAsync(4, tocsp, async entry => {
+                    try {
+                        const md = await pxt.Cloud.markdownAsync(entry.path);
+                        entry.markdown = md;
+                    } catch (e) {
+                        entry.markdown = `_${entry.path} failed to load._`;
+                    }
+                });
             })
             .then(pages => {
                 let md = toc[0].name;
@@ -837,6 +902,10 @@ ${linkString}
             @BODY@
         </div>
     </div>
+</aside>
+
+<aside id=codecard class=box>
+    <pre><code class="lang-codecard">@BODY@</code></pre>
 </aside>
 
 <aside id=tutorialhint class=box>
@@ -954,13 +1023,12 @@ ${linkString}
                     opts.fileSystem["main.ts"] = code;
                 opts.ast = true
 
-                if (options.jres) {
-                    const tilemapTS = pxt.emitTilemapsFromJRes(JSON.parse(options.jres));
-                    if (tilemapTS) {
-                        opts.fileSystem[pxt.TILEMAP_JRES] = options.jres;
-                        opts.fileSystem[pxt.TILEMAP_CODE] = tilemapTS;
-                        opts.sourceFiles.push(pxt.TILEMAP_JRES);
-                        opts.sourceFiles.push(pxt.TILEMAP_CODE);
+                if (options.assets) {
+                    for (const key of Object.keys(options.assets)) {
+                        if (opts.sourceFiles.indexOf(key) < 0) {
+                            opts.sourceFiles.push(key);
+                        }
+                        opts.fileSystem[key] = options.assets[key];
                     }
                 }
 
@@ -986,6 +1054,16 @@ ${linkString}
                     .then(() => {
                         let blocksInfo = pxtc.getBlocksInfo(apis);
                         pxt.blocks.initializeAndInject(blocksInfo);
+                        const tilemapJres = options.assets?.[pxt.TILEMAP_JRES];
+                        const assetsJres = options.assets?.[pxt.IMAGES_JRES];
+                        if (tilemapJres || assetsJres) {
+                            tilemapProject = new TilemapProject();
+                            tilemapProject.loadPackage(mainPkg);
+                            if (tilemapJres)
+                                tilemapProject.loadTilemapJRes(JSON.parse(tilemapJres), true);
+                            if (assetsJres)
+                                tilemapProject.loadAssetsJRes(JSON.parse(assetsJres))
+                        }
                         let bresp = pxtc.decompiler.decompileToBlocks(
                             blocksInfo,
                             program.getSourceFile("main.ts"),
@@ -1005,15 +1083,9 @@ ${linkString}
                             };
                         pxt.debug(bresp.outfiles["main.blocks"])
 
-                        if (options.jres) {
-                            tilemapProject = new TilemapProject();
-                            tilemapProject.loadPackage(mainPkg);
-                            tilemapProject.loadJres(JSON.parse(options.jres), true);
-                        }
-
                         const blocksSvg = pxt.blocks.render(bresp.outfiles["main.blocks"], options);
 
-                        if (options.jres) {
+                        if (tilemapJres || assetsJres) {
                             tilemapProject = null;
                         }
 
@@ -1048,13 +1120,12 @@ ${linkString}
             .then(() => getCompileOptionsAsync(appTarget.compile ? appTarget.compile.hasHex : false))
             .then(opts => {
                 opts.ast = true
-                if (options.jres) {
-                    const tilemapTS = pxt.emitTilemapsFromJRes(JSON.parse(options.jres));
-                    if (tilemapTS) {
-                        opts.fileSystem[pxt.TILEMAP_JRES] = options.jres;
-                        opts.fileSystem[pxt.TILEMAP_CODE] = tilemapTS;
-                        opts.sourceFiles.push(pxt.TILEMAP_JRES);
-                        opts.sourceFiles.push(pxt.TILEMAP_CODE);
+                if (options.assets) {
+                    for (const key of Object.keys(options.assets)) {
+                        if (opts.sourceFiles.indexOf(key) < 0) {
+                            opts.sourceFiles.push(key);
+                        }
+                        opts.fileSystem[key] = options.assets[key];
                     }
                 }
                 const resp = pxtc.compile(opts)
@@ -1064,14 +1135,19 @@ ${linkString}
                         const blocksInfo = pxtc.getBlocksInfo(apis);
                         pxt.blocks.initializeAndInject(blocksInfo);
 
-                        if (options.jres) {
+                        const tilemapJres = options.assets?.[pxt.TILEMAP_JRES];
+                        const assetsJres = options.assets?.[pxt.IMAGES_JRES];
+                        if (tilemapJres || assetsJres) {
                             tilemapProject = new TilemapProject();
                             tilemapProject.loadPackage(mainPkg);
-                            tilemapProject.loadJres(JSON.parse(options.jres), true);
+                            if (tilemapJres)
+                                tilemapProject.loadTilemapJRes(JSON.parse(tilemapJres), true);
+                            if (assetsJres)
+                                tilemapProject.loadAssetsJRes(JSON.parse(assetsJres))
                         }
                         const blockSvg = pxt.blocks.render(code, options);
 
-                        if (options.jres) {
+                        if (tilemapJres || assetsJres) {
                             tilemapProject = null;
                         }
 

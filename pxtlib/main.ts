@@ -296,6 +296,7 @@ namespace pxt {
             hwVariant = null;
             hwName = null;
         }
+        pxt.debug(`hwVariant: ${hwVariant} (${hwName})`)
     }
 
     export function hasHwVariants(): boolean {
@@ -395,6 +396,7 @@ namespace pxt {
         docsUrl?: string; // "/beta---docs"
         multiUrl?: string; // "/beta---multi"
         asseteditorUrl?: string; // "/beta---asseteditor"
+        skillmapUrl?: string; // "/beta---skillmap"
         isStatic?: boolean;
         verprefix?: string; // "v1"
     }
@@ -495,6 +497,7 @@ namespace pxt {
     export const SERIAL_EDITOR_FILE = "serial.txt"
     export const README_FILE = "README.md"
     export const GITIGNORE_FILE = ".gitignore"
+    export const ASSETS_FILE = "assets.json"
     export const CLOUD_ID = "pxt/"
     export const BLOCKS_PROJECT_NAME = "blocksprj";
     export const JAVASCRIPT_PROJECT_NAME = "tsprj";
@@ -502,6 +505,11 @@ namespace pxt {
     export const DEFAULT_GROUP_NAME = "other"; // used in flyout, for snippet groups
     export const TILEMAP_CODE = "tilemap.g.ts";
     export const TILEMAP_JRES = "tilemap.g.jres";
+    export const IMAGES_CODE = "images.g.ts";
+    export const IMAGES_JRES = "images.g.jres";
+    export const TUTORIAL_CODE_START = "_onCodeStart.ts";
+    export const TUTORIAL_CODE_STOP = "_onCodeStop.ts";
+    export const TUTORIAL_INFO_FILE = "tutorial-info-cache.json";
 
     export function outputName(trg: pxtc.CompileTarget = null) {
         if (!trg) trg = appTarget.compile

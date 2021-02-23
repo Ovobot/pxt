@@ -163,7 +163,8 @@ export class ScriptSearch extends data.Component<ISettingsProps, ScriptSearchSta
         const { header } = this.props.parent.state;
 
         let r = workspace.getHeaders()
-            .filter(h => !!h.githubId);
+        if (!/localdependencies=1/i.test(window.location.href))
+            r = r.filter(h => !!h.githubId);
         if (header)
             r = r.filter(h => h.id != header.id) // don't self-reference
         if (query) {
@@ -268,7 +269,7 @@ export class ScriptSearch extends data.Component<ISettingsProps, ScriptSearchSta
         this.hide();
         core.showLoading("downloadingpackage", lf("downloading extension..."));
         pxt.packagesConfigAsync()
-            .then(config => pxt.github.latestVersionAsync(scr.fullName, config))
+            .then(config => pxt.github.latestVersionAsync(scr.slug, config))
             .then(tag => pxt.github.pkgConfigAsync(scr.fullName, tag)
                 .then(cfg => {
                     core.hideLoading("downloadingpackage");
@@ -363,9 +364,11 @@ export class ScriptSearch extends data.Component<ISettingsProps, ScriptSearchSta
         const experiments = this.fetchExperiments();
         const isSearching = searchFor && (ghdata.status === data.FetchStatus.Pending || urldata.status === data.FetchStatus.Pending);
         const disableFileAccessinMaciOs = pxt.appTarget.appTheme.disableFileAccessinMaciOs && (pxt.BrowserUtils.isIOS() || pxt.BrowserUtils.isMac());
+        const disableFileAccessinAndroid = pxt.appTarget.appTheme.disableFileAccessinAndroid && pxt.BrowserUtils.isAndroid();
         const showImportFile = mode == ScriptSearchMode.Extensions
             && pxt.appTarget.appTheme.importExtensionFiles
             && !disableFileAccessinMaciOs
+            && !disableFileAccessinAndroid
             && !searchFor;
         // inject beta at end of / or /#
         // also excludes http://localhost:port/index.html
@@ -415,9 +418,18 @@ export class ScriptSearch extends data.Component<ISettingsProps, ScriptSearchSta
         const experimentsChanged = mode == ScriptSearchMode.Experiments
             && experimentsState != pxt.editor.experiments.state();
 
+        const classes = this.props.parent.createModalClasses("searchdialog");
+
+        const ghName = (scr: pxt.github.GitRepo) => {
+            let n = scr.name.replace(/^pxt-/, "");
+            if (scr.fileName)
+                n = lf("{0} / {1}", n, scr.fileName)
+            return n;
+        }
+
         return (
             <sui.Modal isOpen={visible} dimmer={true}
-                className="searchdialog" size="fullscreen"
+                className={classes} size="fullscreen"
                 onClose={this.hide}
                 closeIcon={closeIcon}
                 header={headerText}
@@ -480,7 +492,7 @@ export class ScriptSearch extends data.Component<ISettingsProps, ScriptSearchSta
                             )}
                             {ghdata.data.filter(repo => repo.status == pxt.github.GitRepoStatus.Approved).map(scr =>
                                 <ScriptSearchCodeCard
-                                    name={scr.name.replace(/^pxt-/, "")}
+                                    name={ghName(scr)}
                                     description={scr.description}
                                     key={'gha' + scr.fullName}
                                     scr={scr}
@@ -494,7 +506,7 @@ export class ScriptSearch extends data.Component<ISettingsProps, ScriptSearchSta
                             )}
                             {ghdata.data.filter(repo => repo.status != pxt.github.GitRepoStatus.Approved).map(scr =>
                                 <ScriptSearchCodeCard
-                                    name={scr.name.replace(/^pxt-/, "")}
+                                    name={ghName(scr)}
                                     description={(scr.description || "")}
                                     extracontent={lf("User-provided extension, not endorsed by Microsoft.")}
                                     key={'ghd' + scr.fullName}

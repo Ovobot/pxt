@@ -230,8 +230,9 @@ namespace ts.pxtc.Util {
     }
 
     export function pushRange<T>(trg: T[], src: ArrayLike<T>): void {
-        for (let i = 0; i < src.length; ++i)
-            trg.push(src[i])
+        if (src)
+            for (let i = 0; i < src.length; ++i)
+                trg.push(src[i])
     }
 
     // TS gets lost in type inference when this is passed an array
@@ -650,6 +651,7 @@ namespace ts.pxtc.Util {
         responseArrayBuffer?: boolean;
         forceLiveEndpoint?: boolean;
         successCodes?: number[];
+        withCredentials?: boolean;
     }
 
     export interface HttpResponse {
@@ -847,12 +849,38 @@ namespace ts.pxtc.Util {
         }
     }
 
+    export async function promisePoolAsync<T, V>(maxConcurrent: number, inputValues: T[], handler: (input: T) => Promise<V>): Promise<V[]> {
+        let curr = 0;
+        const promises = [];
+        const output: V[] = [];
+
+        for (let i = 0; i < maxConcurrent; i++) {
+            const thread = (async () => {
+                while (curr < inputValues.length) {
+                    const id = curr++;
+                    const input = inputValues[id];
+                    output[id] = await handler(input);
+                }
+            })();
+
+            promises.push(thread);
+        }
+
+        await Promise.all(promises);
+
+        return output;
+    }
+
     export function now(): number {
         return Date.now();
     }
 
     export function nowSeconds(): number {
         return Math.round(now() / 1000)
+    }
+
+    export function timeout(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(() => resolve(), ms))
     }
 
     // node.js overrides this to use process.cpuUsage()
@@ -1085,7 +1113,8 @@ namespace ts.pxtc.Util {
     export enum TranslationsKind {
         Editor,
         Sim,
-        Apis
+        Apis,
+        SkillMap
     }
 
     export function downloadTranslationsAsync(targetId: string, baseUrl: string, code: string, pxtBranch: string, targetBranch: string, live: boolean, translationKind?: TranslationsKind): Promise<pxt.Map<string>> {
@@ -1112,6 +1141,9 @@ namespace ts.pxtc.Util {
                 break;
             case TranslationsKind.Apis:
                 stringFiles = [{ branch: targetBranch, staticName: "bundled-strings.json", path: targetId + "/bundled-strings.json" }];
+                break;
+            case TranslationsKind.SkillMap:
+                stringFiles = [{ branch: targetBranch, staticName: "skillmap-strings.json", path: "/skillmap-strings.json" }];
                 break;
         }
         let translations: pxt.Map<string>;
@@ -1343,7 +1375,8 @@ namespace ts.pxtc.Util {
                 const imgdat = ctx.getImageData(0, 0, canvas.width, canvas.height)
                 const d = imgdat.data
                 const bpp = (d[0] & 1) | ((d[1] & 1) << 1) | ((d[2] & 1) << 2)
-                if (bpp > 5)
+                // Safari sometimes just reads a buffer full of 0's so we also need to bail if bpp == 0
+                if (bpp > 5 || bpp == 0)
                     return Promise.reject(new Error(lf("Invalid encoded PNG format")))
 
                 function decode(ptr: number, bpp: number, trg: Uint8Array) {
@@ -1411,6 +1444,8 @@ namespace ts.pxtc.BrowserImpl {
             client = new XMLHttpRequest();
             if (options.responseArrayBuffer)
                 client.responseType = "arraybuffer";
+            if (options.withCredentials)
+                client.withCredentials = true;
             client.onreadystatechange = () => {
                 if (resolved) return // Safari/iOS likes to call this thing more than once
 

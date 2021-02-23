@@ -4,6 +4,7 @@ import * as sui from "./sui";
 import * as core from "./core";
 import * as workspace from "./workspace";
 import * as compiler from "./compiler";
+import * as auth from "./auth";
 
 import { SearchInput } from "./components/searchInput";
 import { ProjectsCodeCard } from "./projects";
@@ -183,12 +184,9 @@ export class ScriptManagerDialog extends data.Component<ScriptManagerDialogProps
             return workspace.getTextAsync(header.id)
                 .then(text => workspace.duplicateAsync(header, text, res))
                 .then(clonedHeader => {
-                    // If we're cloud synced, update the cloudSync flag
-                    if (this.props.parent.cloudSync()) clonedHeader.cloudSync = true;
-
-                    delete clonedHeader.blobId
-                    delete clonedHeader.blobVersion
-                    delete clonedHeader.blobCurrent
+                    delete clonedHeader.blobId_
+                    delete clonedHeader.blobVersion_
+                    delete clonedHeader.blobCurrent_
 
                     return workspace.saveAsync(clonedHeader);
                 })
@@ -289,7 +287,8 @@ export class ScriptManagerDialog extends data.Component<ScriptManagerDialogProps
 
     private getSortedHeaders() {
         const { sortedBy, sortedAsc } = this.state;
-        const headers = this.fetchLocalData() || [];
+        const headers = (this.fetchLocalData() || [])
+            .filter(h => !h.tutorial?.metadata?.hideIteration);
         return headers.sort(this.getSortingFunction(sortedBy, sortedAsc))
     }
 

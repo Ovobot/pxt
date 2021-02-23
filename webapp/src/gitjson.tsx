@@ -10,6 +10,7 @@ import * as data from "./data";
 import * as markedui from "./marked";
 import * as compiler from "./compiler";
 import * as cloudsync from "./cloudsync";
+import * as tutorial from "./tutorial";
 import * as _package from "./package";
 
 const MAX_COMMIT_DESCRIPTION_LENGTH = 70;
@@ -53,7 +54,6 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         this.handleBranchClick = this.handleBranchClick.bind(this);
         this.handleGithubError = this.handleGithubError.bind(this);
         this.handlePullRequest = this.handlePullRequest.bind(this);
-        this.handleAutorize = this.handleAutorize.bind(this);
     }
 
     clearCacheDiff(cachePrefix?: string, f?: DiffFile) {
@@ -134,8 +134,9 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         } else if (f.name == pxt.CONFIG_NAME) {
             needsReload = true;
             const gs = this.getGitJson()
+            const parsed = this.parsedRepoId();
             for (let d of deletedFiles) {
-                const prev = pxt.github.lookupFile(gs.commit, d)
+                const prev = pxt.github.lookupFile(parsed, gs.commit, d)
                 epkg.setFile(d, prev && prev.blobContent || "// Cannot restore.")
             }
             for (let d of addedFiles) {
@@ -177,7 +178,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
     private async newBranchAsync() {
         await cloudsync.ensureGitHubTokenAsync();
         const gid = this.parsedRepoId()
-        const initialBranchName = await pxt.github.getNewBranchNameAsync(gid.fullName, "patch-")
+        const initialBranchName = await pxt.github.getNewBranchNameAsync(gid.slug, "patch-")
         const branchName = await core.promptAsync({
             header: lf("New branch name"),
             body: lf("Name cannot have spaces or special characters. Examples: {0}",
@@ -197,7 +198,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         this.showLoading("github.branch", true, lf("creating branch..."));
         try {
             const gs = this.getGitJson()
-            await pxt.github.createNewBranchAsync(gid.fullName, branchName, gs.commit.sha)
+            await pxt.github.createNewBranchAsync(gid.slug, branchName, gs.commit.sha)
             await this.switchProjectToBranchAsync(branchName)
             this.forceUpdate();
         } catch (e) {
@@ -222,7 +223,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
 
     public async showSwitchBranchDialogAsync() {
         const gid = this.parsedRepoId()
-        const branches = await pxt.github.listRefsExtAsync(gid.fullName, "heads")
+        const branches = await pxt.github.listRefsExtAsync(gid.slug, "heads")
         const branchList = Object.keys(branches.refs).map(r => ({
             name: r,
             description: branches.refs[r],
@@ -282,36 +283,43 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         this.pullAsync().done();
     }
 
-    private handleAutorize() {
-        pxt.tickEvent("github.authorize");
-        const provider = cloudsync.githubProvider();
-        provider.authorizeAppAsync();
-    }
-
     async forkAsync(fromError: boolean) {
         const parsed = this.parsedRepoId()
         const provider = cloudsync.githubProvider();
         const user = provider.user();
         let org: JSX.Element = undefined;
+        let rememberMe = false
+        const handleRememberMeChanged = (v: boolean) => {
+            rememberMe = v
+            core.forceUpdate()
+        }
+        const handleAutorize = () => {
+            pxt.tickEvent("github.authorize");
+            const provider = cloudsync.githubProvider();
+            provider.authorizeAppAsync(rememberMe);
+        }
         if (fromError && user && parsed.owner !== user.userName) {
             // this is an org repo, so our OAuth app might not have been granted rights
             // test if the app can read the repo
             const isOrg = await pxt.github.isOrgAsync(parsed.owner);
             if (isOrg) {
-                org = <p className="ui small">
+                // tslint:disable: react-this-binding-issue
+                org = <div className="ui small">
                     {lf("If you already have write permissions to this repository, you may have to authorize the MakeCode App in the {0} organization.", parsed.owner)}
-                    <sui.Link className="ui link" text={lf("Authorize MakeCode")} onClick={this.handleAutorize} onKeyDown={sui.fireClickOnEnter} />
-                </p>
+                    <sui.PlainCheckbox label={lf("Remember me")} onChange={handleRememberMeChanged} />
+                    <sui.Link className="ui link" text={lf("Authorize MakeCode")} onClick={handleAutorize} onKeyDown={sui.fireClickOnEnter} />
+                </div>
+                // tslint:enable: react-this-binding-issue
             }
         }
         const error = fromError && <div className="ui message warning">
-            {lf("Oops, we could not write to {0}.", parsed.fullName)}
+            {lf("Oops, we could not write to {0}.", parsed.slug)}
             {org}
         </div>;
         const help =
-            <p>{lf("Forking creates a copy of {0} under your account. You can submit your changes back via a pull request.", parsed.fullName)}</p>
+            <p>{lf("Forking creates a copy of {0} under your account. You can submit your changes back via a pull request.", parsed.slug)}</p>
         const res = await core.confirmAsync({
-            header: lf("Do you want to fork {0}?", parsed.fullName),
+            header: lf("Do you want to fork {0}?", parsed.slug),
             hasCloseIcon: true,
             helpUrl: "/github/fork",
             jsx: <div>
@@ -327,7 +335,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         this.showLoading("github.fork", true, lf("forking repository (this may take a minute or two)..."))
         try {
             const gs = this.getGitJson();
-            const newGithubId = await pxt.github.forkRepoAsync(parsed.fullName, gs.commit.sha)
+            const newGithubId = await pxt.github.forkRepoAsync(parsed.slug, gs.commit.sha)
             const { header } = this.props.parent.state;
             header.githubId = newGithubId
             gs.repo = header.githubId
@@ -378,7 +386,20 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
             return;
         }
 
-        const v = pxt.semver.parse(pkg.mainPkg.config.version, "0.0.0")
+        // we can't really trust the version pxt.json as the user may
+        // have create new releases in github since there.
+        // instead, we query the current tags and find the last one
+        // automatically
+        let currv = pkg.mainPkg.config.version;
+        try {
+            const ghid = this.parsedRepoId();
+            const tags = await pxt.github.listRefsAsync(ghid.slug, "tags")
+            const stags = pxt.semver.sortLatestTags(tags)
+            currv = stags[0];
+        } catch (e) {
+            console.log(e)
+        }
+        const v = pxt.semver.parse(currv, "0.0.0")
         const vmajor = pxt.semver.parse(pxt.semver.stringify(v)); vmajor.major++; vmajor.minor = 0; vmajor.patch = 0;
         const vminor = pxt.semver.parse(pxt.semver.stringify(v)); vminor.minor++; vminor.patch = 0;
         const vpatch = pxt.semver.parse(pxt.semver.stringify(v)); vpatch.patch++;
@@ -388,30 +409,44 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
             bumpType = e.currentTarget.name;
             coretsx.forceUpdate();
         }
+        let shouldCacheTutorial: boolean = false;
+        function onCacheTutorialChange(e: React.ChangeEvent<HTMLInputElement>) {
+            shouldCacheTutorial = !shouldCacheTutorial;
+            coretsx.forceUpdate();
+        }
         const ok = await core.confirmAsync({
             header: lf("Pick a release version"),
             agreeLbl: lf("Create release"),
             disagreeLbl: lf("Cancel"),
-            jsxd: () => <div className="grouped fields">
-                <label>{lf("Choose a release version that describes the changes you made to the code.")}
-                    {sui.helpIconLink("/github/release#versioning", lf("Learn about version numbers."))}
-                </label>
-                <div className="field">
-                    <div className="ui radio checkbox">
-                        <input type="radio" name="patch" checked={bumpType == "patch"} aria-checked={bumpType == "patch"} onChange={onBumpChange} />
-                        <label>{lf("{0}: patch (bug fixes or other non-user visible changes)", pxt.semver.stringify(vpatch))}</label>
+            jsxd: () => <div>
+                <div className="grouped fields">
+                    <label>{lf("Choose a release version that describes the changes you made to the code.")}
+                        {sui.helpIconLink("/github/release#versioning", lf("Learn about version numbers."))}
+                    </label>
+                    <div className="field">
+                        <div className="ui radio checkbox">
+                            <input type="radio" name="patch" checked={bumpType == "patch"} aria-checked={bumpType == "patch"} onChange={onBumpChange} />
+                            <label>{lf("{0}: patch (bug fixes or other non-user visible changes)", pxt.semver.stringify(vpatch))}</label>
+                        </div>
+                    </div>
+                    <div className="field">
+                        <div className="ui radio checkbox">
+                            <input type="radio" name="minor" checked={bumpType == "minor"} aria-checked={bumpType == "minor"} onChange={onBumpChange} />
+                            <label>{lf("{0}: minor change (added function or optional parameters)", pxt.semver.stringify(vminor))}</label>
+                        </div>
+                    </div>
+                    <div className="field">
+                        <div className="ui radio checkbox">
+                            <input type="radio" name="major" checked={bumpType == "major"} aria-checked={bumpType == "major"} onChange={onBumpChange} />
+                            <label>{lf("{0}: major change (renamed functions, deleted parameters or functions)", pxt.semver.stringify(vmajor))}</label>
+                        </div>
                     </div>
                 </div>
-                <div className="field">
-                    <div className="ui radio checkbox">
-                        <input type="radio" name="minor" checked={bumpType == "minor"} aria-checked={bumpType == "minor"} onChange={onBumpChange} />
-                        <label>{lf("{0}: minor change (added function or optional parameters)", pxt.semver.stringify(vminor))}</label>
-                    </div>
-                </div>
-                <div className="field">
-                    <div className="ui radio checkbox">
-                        <input type="radio" name="major" checked={bumpType == "major"} aria-checked={bumpType == "major"} onChange={onBumpChange} />
-                        <label>{lf("{0}: major change (renamed functions, deleted parameters or functions)", pxt.semver.stringify(vmajor))}</label>
+                <div className="grouped fields">
+                    <label>{lf("Advanced")}</label>
+                    <div className="field checkbox">
+                        <input type="checkbox" name="cachetutorial" checked={shouldCacheTutorial} aria-checked={shouldCacheTutorial} onChange={onCacheTutorialChange} />
+                        <label>{lf("Optimize for tutorials by caching information about the markdown.")}</label>
                     </div>
                 </div>
             </div>
@@ -429,6 +464,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         this.showLoading("github.release.new", true, lf("creating release..."));
         try {
             const { header } = this.props.parent.state;
+            if (shouldCacheTutorial) await this.cacheTutorialInfo(header);
             await workspace.bumpAsync(header, newVer)
             pkg.mainPkg.config.version = newVer;
             await this.maybeReloadAsync()
@@ -439,6 +475,32 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         } finally {
             this.hideLoading();
         }
+    }
+
+    private async cacheTutorialInfo(header: pxt.workspace.Header) {
+        const mdRegex = /\.md$/;
+        const githubId = this.parsedRepoId();
+
+        let files = await workspace.getTextAsync(header.id);
+        let mdPaths = Object.keys(files).filter(f => f.match(mdRegex));
+        const tutorialInfo: pxt.Map<pxt.BuiltTutorialInfo> = {};
+        for (let path of mdPaths) {
+            const parsed = pxt.tutorial.parseTutorial(files[path]);
+            const hash = pxt.BrowserUtils.getTutorialInfoHash(parsed.code);
+            const usedBlocks = await tutorial.getUsedBlocksAsync(parsed.code, path, parsed.language, true);
+            const formatPath = path.replace(mdRegex, "");
+            tutorialInfo[`https://github.com/${githubId.fullName}${formatPath == "README" ? "" : "/" + formatPath}`] = { usedBlocks, hash };
+        }
+        files[pxt.TUTORIAL_INFO_FILE] = JSON.stringify(tutorialInfo);
+
+        let cfg = pxt.Package.parseAndValidConfig(files[pxt.CONFIG_NAME]);
+        if (cfg.files.indexOf(pxt.TUTORIAL_INFO_FILE) < 0) {
+            cfg.files.push(pxt.TUTORIAL_INFO_FILE);
+            files[pxt.CONFIG_NAME] = pxt.Package.stringifyConfig(cfg);
+        }
+
+        await workspace.saveAsync(header, files);
+        return await this.commitAsync()
     }
 
     private async showLoading(tick: string, ensureToken: boolean, msg: string) {
@@ -626,7 +688,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
 
             `
             */
-            const id = await pxt.github.createPRFromBranchAsync(gh.fullName, "master", gh.tag, title, msg);
+            const id = await pxt.github.createPRFromBranchAsync(gh.slug, "master", gh.tag, title, msg);
             data.invalidateHeader("pkg-git-pr", this.props.parent.state.header);
             core.infoNotification(lf("Pull request created successfully!", id));
         } catch (e) {
@@ -686,7 +748,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
         const user = this.getData("github:user") as pxt.editor.UserInfo;
 
         // don't use gs.prUrl, as it gets cleared often
-        const url = `https://github.com/${githubId.fullName}${master ? "" : `/tree/${githubId.tag}`}`;
+        const url = `https://github.com/${githubId.slug}/${master && !githubId.fileName ? "" : pxt.github.join("tree", githubId.tag || "master", githubId.fileName)}`;
         const needsToken = !pxt.github.token;
         // this will show existing PR if any
         const pr: pxt.github.PullRequest = this.getData("pkg-git-pr:" + header.id)
@@ -707,7 +769,7 @@ class GithubComponent extends data.Component<GithubProps, GithubState> {
                             className={haspull === true ? "positive" : ""}
                             text={lf("Pull changes")} title={lf("Pull changes from GitHub to get your code up-to-date.")} onClick={this.handlePullClick} onKeyDown={sui.fireClickOnEnter} />
                         {!isBlocksMode && isOwner &&
-                            <sui.Link className="ui item button desktop only" icon="user plus" href={`https://github.com/${githubId.fullName}/settings/collaboration`} target="_blank" title={lf("Invite others to contributes to this GitHub repository.")} />}
+                            <sui.Link className="ui item button desktop only" icon="user plus" href={`https://github.com/${githubId.slug}/settings/collaboration`} target="_blank" title={lf("Invite others to contributes to this GitHub repository.")} />}
                         <sui.Link className="ui button" icon="external alternate" href={url} title={lf("Open repository in GitHub.")} target="_blank" onKeyDown={sui.fireClickOnEnter} />
                     </div>
                 </div>
@@ -1062,7 +1124,7 @@ ${content}
     }
 
     renderCore() {
-        const { diffFiles, blocksMode } = this.props;
+        const { diffFiles, blocksMode, allowRevert } = this.props;
         const targetTheme = pxt.appTarget.appTheme;
         const invertedTheme = targetTheme.invertedMenu && targetTheme.invertedMonaco;
 
@@ -1072,9 +1134,9 @@ ${content}
         return diffFiles.length ? <div className="ui section">
             <div className={`ui ${invertedTheme ? "inverted " : ""} diffheader segment`}>
                 {lf("There are local changes.")}
-                <sui.Button className="small" icon="undo" text={lf("Revert all")}
+                {allowRevert && <sui.Button className="small" icon="undo" text={lf("Revert all")}
                     ariaLabel={lf("Revert all changes")} title={lf("Revert all changes")}
-                    textClass={"landscape only"} onClick={this.revertAllFiles} />
+                    textClass={"landscape only"} onClick={this.revertAllFiles} />}
             </div>
             {displayDiffFiles.map(df => this.showDiff(df))}
         </div> : <div className={`ui ${invertedTheme ? "inverted " : ""}segment`}>
@@ -1116,7 +1178,7 @@ class MessageComponent extends sui.StatelessUIElement<GitHubViewProps> {
                 <i className="exclamation circle icon"></i>
                 <div className="content">
                     {lf("This repository was not found. It might have been deleted or you may not have rights to access it.")}
-                    <sui.Link href={`https://github.com/${githubId.fullName}`} text={lf("Go to GitHub")} />
+                    <sui.Link href={`https://github.com/${githubId.slug}`} text={lf("Go to GitHub")} />
                 </div>
             </div>
 
@@ -1267,7 +1329,7 @@ class PullRequestZone extends sui.StatelessUIElement<GitHubViewProps> {
             </div>
             {(!mergeable && !mergeableUnknown) && <div className="ui field">
                 <sui.Link className="button" text={lf("Resolve conflicts")}
-                    href={`https://github.com/${githubId.fullName}/pull/${pullRequest.number}/conflicts`}
+                    href={`https://github.com/${githubId.slug}/pull/${pullRequest.number}/conflicts`}
                     target="_blank" />
                 <span className="inline-help">{lf("Resolve merge conflicts in GitHub.")}
                     {sui.helpIconLink("/github/pull-requests", lf("Learn about merging pull requests in GitHub."))}
@@ -1432,13 +1494,13 @@ class ExtensionZone extends sui.StatelessUIElement<GitHubViewProps> {
                     inverted={inverted}
                     onKeyDown={sui.fireClickOnEnter} />
                 <span className="inline-help">
-                    {lf("Fork your own copy of {0} to your account.", githubId.fullName)}
+                    {lf("Fork your own copy of {0} to your account.", githubId.slug)}
                     {sui.helpIconLink("/github/fork", lf("Learn more about forking repositories."))}
                 </span>
             </div>}
             {needsLicenseMessage && <div className={`ui field`}>
                 <sui.Link className="basic button"
-                    href={`https://github.com/${githubId.fullName}/community/license/new?branch=${githubId.tag}&template=mit`}
+                    href={`https://github.com/${githubId.slug}/community/license/new?branch=${githubId.tag}&template=mit`}
                     inverted={inverted}
                     text={lf("Add license")}
                     target={"_blank"} />
@@ -1484,7 +1546,7 @@ class CommitView extends sui.UIElement<CommitViewProps, CommitViewState> {
         // load commit and compute markdown
         const { githubId, commit } = this.props;
         this.setState({ loading: true });
-        pxt.github.getCommitAsync(githubId.fullName, commit.sha)
+        pxt.github.getCommitAsync(githubId.slug, commit.sha)
             .then(cmt => this.computeDiffAsync(cmt))
             .then(dfs => this.setState({ diffFiles: dfs }))
             .finally(() => this.setState({ loading: false }))
@@ -1498,7 +1560,7 @@ class CommitView extends sui.UIElement<CommitViewProps, CommitViewState> {
         return Promise.all(
             files.map(p => {
                 const path = p.name;
-                const oldEnt = pxt.github.lookupFile(commit, path);
+                const oldEnt = pxt.github.lookupFile(githubId, commit, path);
                 if (!oldEnt) return Promise.resolve();
                 return pxt.github.downloadTextAsync(githubId.fullName, commit.sha, path)
                     .then(content => { oldFiles[path] = content; });
@@ -1596,7 +1658,7 @@ class HistoryZone extends sui.UIElement<GitHubViewProps, HistoryState> {
         const { selectedCommit, expanded, selectedDay } = this.state;
         const inverted = !!pxt.appTarget.appTheme.invertedGitHub;
         const commits = expanded &&
-            this.getData(`gh-commits:${githubId.fullName}#${gs.commit.sha}`) as pxt.github.CommitInfo[];
+            this.getData(`gh-commits:${githubId.slug}#${gs.commit.sha}`) as pxt.github.CommitInfo[];
         const loading = expanded && !commits;
 
         // group commits by day
