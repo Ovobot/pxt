@@ -9,6 +9,7 @@ namespace pxt.Cloud {
     export let accessToken = "";
     export let localToken = "";
     let _isOnline = true;
+    export let msBuildApi = "https://www.makecode.com/api/";
     export let onOffline = () => { };
 
     function offlineError(url: string) {
@@ -101,6 +102,23 @@ namespace pxt.Cloud {
         options.url = pxt.webConfig && pxt.webConfig.isStatic && !options.forceLiveEndpoint ? pxt.webConfig.relprefix + options.url : apiRoot + options.url;
         options.allowGzipPost = true
         if (!Cloud.isOnline() && !pxt.BrowserUtils.isPxtElectron()) {
+            return offlineError(options.url);
+        }
+        if (!options.headers) options.headers = {}
+        if (pxt.BrowserUtils.isLocalHost()) {
+            if (Cloud.localToken)
+                options.headers["Authorization"] = Cloud.localToken;
+        } else if (accessToken) {
+            options.headers["x-td-access-token"] = accessToken
+        }
+        return Util.requestAsync(options)
+            .catch(e => handleNetworkError(options, e))
+    }
+
+    export function msBuildRequestAsync(options: Util.HttpRequestOptions) {
+        options.url = msBuildApi + options.url;
+        options.allowGzipPost = true
+        if (!Cloud.isOnline()) {
             return offlineError(options.url);
         }
         if (!options.headers) options.headers = {}
@@ -211,6 +229,11 @@ namespace pxt.Cloud {
     export function privatePostAsync(path: string, data: any, forceLiveEndpoint: boolean = false) {
         console.log("post data ",data);
         return privateRequestAsync({ url: path, data: data || {}, forceLiveEndpoint }).then(resp => resp.json)
+    }
+
+    export function msCloudPostAsync(path: string, data: any, forceLiveEndpoint: boolean = false) {
+        console.log("post data ",data);
+        return msBuildRequestAsync({ url: path, data: data || {}, forceLiveEndpoint }).then(resp => resp.json)
     }
 
     export function isLoggedIn() { return !!accessToken }
