@@ -1295,7 +1295,9 @@ namespace pxt.hexloader {
             // const forceLive = pxt.webConfig && pxt.webConfig.isStatic;
             // return (cdnUrlPromise = Cloud.privateGetAsync("clientconfig", forceLive)
             //     .then(r => r.primaryCdnUrl));
-            return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
+            //http://pxt-astone.oss-cn-shanghai.aliyuncs.com/blob/001d86bff083549c50992993985a0779ea17f463/static/community/salvo/salvo.png
+            return (cdnUrlPromise = Promise.resolve("https://pxt-astone.oss-cn-shanghai.aliyuncs.com"))
+            //return (cdnUrlPromise = Promise.resolve("https://makecode.trafficmanager.cn"))
         }
     }
 
