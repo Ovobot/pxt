@@ -761,6 +761,7 @@ function gitSaveLocalAsync(opts: UploadOptions, uplReqs: Map<BlobReq>){
         "codeembed.html",
         "release.manifest",
         "worker.js",
+        "serviceworker.js",
         "monacoworker.js",
         "simulator.html",
         "sim.manifest",
@@ -809,11 +810,15 @@ function gitSaveLocalAsync(opts: UploadOptions, uplReqs: Map<BlobReq>){
                             //console.log("should find cdn file" ,findCDNfp);
                         }
                     }
-                    u.content = U.replaceAll(u.content, "@commitCdnUrl@","https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/d0cd45c513f2c942b34524520097cd9a440dceaa/");
+                    u.content = U.replaceAll(u.content, "@commitCdnUrl@","https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/c20adde3b102f793061fa52f74ece53afc195ed6/");
+                    u.content = U.replaceAll(u.content, "@targetUrl@","https://xmaker.ovobot.cc");
+                    u.content = U.replaceAll(u.content,"@cdnUrl@",'https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com');
+                    u.content = U.replaceAll(u.content,"@monacoworkerjs@","/---monacoworker");
+                    u.content = U.replaceAll(u.content,"@workerjs@","/---worker");
                 }
                 fs.writeFileSync(fpath, u.content, { encoding: u.encoding })
             }
-            let commitfolder = path.join(dst, "d0cd45c513f2c942b34524520097cd9a440dceaa");
+            let commitfolder = path.join(dst, "c20adde3b102f793061fa52f74ece53afc195ed6");
 
             nodeutil.mkdirP(commitfolder)
             nodeutil.cpR(trgPath, commitfolder);
@@ -1085,18 +1090,18 @@ function uploadCoreAsync(opts: UploadOptions) {
         "relprefix": "/---",
         "verprefix": "",
         "workerjs": "/---worker",//"/worker.js"
-        "serviceworkerjs": opts.localDir + "serviceworker.js",
+        "serviceworkerjs": "/---serviceworker",//serviceworker.js
         "monacoworkerjs": "/---monacoworker",//"/monacoworker.js"
         "gifworkerjs": "/---gifworker",//"gifjs/gif.worker.js"
         "pxtVersion": pxtVersion(),
-        "pxtRelId": "d0cd45c513f2c942b34524520097cd9a440dceaa",
-        "pxtCdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/d0cd45c513f2c942b34524520097cd9a440dceaa/",
-        "commitCdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/d0cd45c513f2c942b34524520097cd9a440dceaa/",
-        "blobCdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/d0cd45c513f2c942b34524520097cd9a440dceaa/",
+        "pxtRelId": "c20adde3b102f793061fa52f74ece53afc195ed6",
+        "pxtCdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/c20adde3b102f793061fa52f74ece53afc195ed6/",
+        "commitCdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/c20adde3b102f793061fa52f74ece53afc195ed6/",
+        "blobCdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/commit/c20adde3b102f793061fa52f74ece53afc195ed6/",
         "cdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com",
         "targetVersion": opts.pkgversion,
-        "targetRelId": "d0cd45c513f2c942b34524520097cd9a440dceaa",
-        "targetUrl": "https://arcade.ovobot.cn",
+        "targetRelId": "c20adde3b102f793061fa52f74ece53afc195ed6",
+        "targetUrl": "https://xmaker.ovobot.cc",
         "targetId": opts.target,
         "simUrl": "/static/simulator.html",
         "partsUrl": "/static/siminstructions.html",
@@ -1147,7 +1152,7 @@ function uploadCoreAsync(opts: UploadOptions) {
             "cdnUrl": "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com",
             "targetVersion": opts.pkgversion,
             "targetRelId": "",
-            "targetUrl": "https://arcade.ovobot.cn",
+            "targetUrl": "https://xmaker.ovobot.cc",
             "targetId": opts.target,
             "simUrl": opts.localDir + "simulator.html",
             "partsUrl": "https://trg-arcade.userpxt.io/---siminstructions",
@@ -1187,7 +1192,9 @@ function uploadCoreAsync(opts: UploadOptions) {
             replacements["data-manifest=\"\""] = `manifest="${opts.localDir}release.manifest"`;
         }
     }
-
+    if (!opts.noAppCache) {
+        replacements["data-manifest=\"\""] = `manifest="/static/release.manifest"`;
+    }
     let replFiles = [
         "index.html",
         "embed.js",
@@ -2813,7 +2820,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
     }
     console.log("uplReqs",uplReqs);
     console.log("uplReqs_proj",uplReqs_proj);
-    let commitfolder = path.join(dst, "d0cd45c513f2c942b34524520097cd9a440dceaa");
+    let commitfolder = path.join(dst, "c20adde3b102f793061fa52f74ece53afc195ed6");
     let releasefolder = path.join(dst, "release");
     nodeutil.mkdirP(releasefolder)
     nodeutil.cpR(commitfolder, releasefolder);

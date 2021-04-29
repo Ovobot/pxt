@@ -25,13 +25,13 @@ initWebappServiceWorker();
 
 function initWebappServiceWorker() {
     // Empty string for released, otherwise contains the ref or version path
-    const ref = `@relprefix@`.replace("---", "").replace(/^\//, "");
+    const ref = `/---`.replace("---", "").replace(/^\//, "");
 
     // We don't do offline for version paths, only named releases
     const isNamedEndpoint = ref.indexOf("/") === -1;
 
     // pxtRelId is replaced with the commit hash for this release
-    const refCacheName = "makecode;" + ref + ";@pxtRelId@";
+    const refCacheName = "xmaker;" + ref + ";c20adde3b102f793061fa52f74ece53afc195ed6";
 
     const cdnUrl = `@cdnUrl@`;
 
@@ -55,6 +55,7 @@ function initWebappServiceWorker() {
         `/blb/pxtwinrt.js`,
         `/blb/pxteditor.js`,
         `/blb/pxtsim.js`,
+        `/blb/sim.js`,
         `/blb/pxtembed.js`,
         `/blb/pxtworker.js`,
         `/blb/pxtweb.js`,
