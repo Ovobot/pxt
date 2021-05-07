@@ -252,7 +252,8 @@ namespace pxt.Cloud {
     }
 
     export function getServiceUrl() {
-        return apiRoot.replace(/\/api\/$/, "")
+        return "/api/".replace(/\/api\/$/, "")
+        //return apiRoot.replace(/\/api\/$/, "")
     }
 
     export function getUserId() {
