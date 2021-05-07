@@ -115,7 +115,7 @@ class AccountPanel extends sui.UIElement<AccountPanelProps, {}> {
         return (
             <div className="ui card panel">
                 <div className="header-text">
-                    <label>{lf("Account")}</label>
+                    <label>{lf("Profile")}</label>
                 </div>
                 {profile?.idp?.picture?.dataUrl ? avatarElem : initialsElem}
                 <div className="row-span-two">

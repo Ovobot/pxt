@@ -68,6 +68,28 @@ export class Keymap extends data.Component<ISettingsProps, KeymapState> {
                 "arcade": [ {
                         title: "player 1",
                         map: {
+                            [lf("up")]: ["↑", "W"],
+                            [lf("down")]: ["↓", "S"],
+                            [lf("left")]: ["←", "A"],
+                            [lf("right")]: ["→", "D"],
+                            "a": ["Z", lf("{id:keyboard symbol}space")],
+                            "b": ["X", lf("{id:keyboard symbol}enter")]
+                        }
+                    },
+                    {
+                        title: "player 2",
+                        map: {
+                            "up": ["I"],
+                            "down": ["K"],
+                            "left": ["J"],
+                            "right": ["L"],
+                            "a": ["U"],
+                            "b": ["O"]
+                        }
+                    } ],
+                "xtronpro": [ {
+                        title: "player 1",
+                        map: {
                             "up": ["↑", "W"],
                             "down": ["↓", "S"],
                             "left": ["→", "A"],
@@ -85,17 +107,6 @@ export class Keymap extends data.Component<ISettingsProps, KeymapState> {
                             "right": ["L"],
                             "a": ["U"],
                             "b": ["O"]
-                        }
-                    } ],
-                "xtronpro": [ {
-                        title: "key map",
-                        map: {
-                            "up": ["↑", "W"],
-                            "down": ["↓", "S"],
-                            "left": ["→", "A"],
-                            "right": ["←", "D"],
-                            "a": ["Z", "space"],
-                            "b": ["X", "enter"]
                         }
                     }]
                 }

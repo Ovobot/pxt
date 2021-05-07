@@ -118,7 +118,7 @@ export class GithubProvider extends cloudsync.ProviderBase {
                 </ol>}
                 {useToken && <div className="ui field">
                     <label id="selectUrlToOpenLabel">{lf("Paste GitHub token here:")}</label>
-                    <input id="githubTokenInput" type="url" tabIndex={0} autoFocus aria-labelledby="selectUrlToOpenLabel" placeholder="0123abcd..." className="ui blue fluid"></input>
+                    <input id="githubTokenInput" type="url" tabIndex={0} autoFocus aria-labelledby="selectUrlToOpenLabel" placeholder="ghp_ABC..." className="ui blue fluid"></input>
                 </div>}
             </div>,
         }).then(res => {
@@ -159,7 +159,7 @@ export class GithubProvider extends cloudsync.ProviderBase {
             "&response_type=token&client_id=gh-token&redirect_uri=" +
             encodeURIComponent(self)
         window.location.href = login;
-        return Promise.delay(1000);
+        return pxt.Util.delay(1000);
     }
 
     getUserInfoAsync(): Promise<pxt.editor.UserInfo> {
@@ -215,7 +215,6 @@ export class GithubProvider extends cloudsync.ProviderBase {
                         }
                     })
                     .then(() => cloudsync.syncAsync())
-                
             }).finally(() => core.hideLoading(LOAD_ID))
     }
 

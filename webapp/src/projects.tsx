@@ -7,7 +7,6 @@ import * as sui from "./sui";
 import * as core from "./core";
 import * as cloudsync from "./cloudsync";
 import * as auth from "./auth";
-import * as workspace from "./workspace";
 import * as identity from "./identity";
 import * as codecard from "./codecard"
 import * as carousel from "./carousel";
@@ -455,7 +454,6 @@ class HeroBanner extends data.Component<ISettingsProps, HeroBannerState> {
         if (!paused && !this.carouselInterval && this.prevGalleries && this.prevGalleries.length) {
             pxt.debug(`start refreshing hero carousel`)
             this.carouselInterval = setInterval(this.handleRefreshCard, HERO_BANNER_DELAY);
-            this.handleRefreshCard();
         }
     }
 
@@ -467,7 +465,7 @@ class HeroBanner extends data.Component<ISettingsProps, HeroBannerState> {
         }
     }
 
-    componentWillMount() {
+    componentDidMount() {
         this.startRefresh();
     }
 
@@ -600,7 +598,7 @@ export class ProjectsCarousel extends data.Component<ProjectsCarouselProps, Proj
     }
 
     fetchLocalData(): pxt.workspace.Header[] {
-        const headers = workspace.getHeaders();
+        const headers = this.getData(`headers:`) || [];
         return headers;
     }
 
@@ -758,19 +756,19 @@ export class ProjectsCarousel extends data.Component<ProjectsCarouselProps, Proj
                             : scr.tutorialCompleted ? scr.tutorialCompleted.steps
                                 : undefined;
                     const ghid = pxt.github.parseRepoId(scr.githubId);
-                    const cloudState = !!scr.cloudUserId ? "cloud" : "local"
+
                     return <ProjectsCodeCard
                         key={'local' + scr.id + scr.recentUse}
                         // ref={(view) => { if (index === 1) this.latestProject = view }}
                         cardType="file"
                         name={(ghid && pxt.github.join(ghid.project, ghid.fileName)) || scr.name}
-                        time={scr.recentUse}
+                        time={scr.modificationTime}
                         url={scr.pubId && scr.pubCurrent ? "/" + scr.pubId : ""}
                         scr={scr} index={index}
                         onCardClick={this.handleCardClick}
                         tutorialStep={tutorialStep}
                         tutorialLength={tutoriallength}
-                        cloudState={cloudState}
+                        projectId={scr.id}
                     />;
                 })}
                 {showScriptManagerCard ? <div role="button" className="ui card link buttoncard scriptmanagercard" title={lf("See all projects")}
@@ -1277,7 +1275,7 @@ export class ExitAndSaveDialog extends data.Component<ISettingsProps, ExitAndSav
             pxt.tickEvent("exitandsave.projectrename", { length: newName && newName.length }, { interactiveConsent: true });
             p = p.then(() => this.props.parent.updateHeaderNameAsync(newName));
         }
-        p.done(() => {
+        p.then(() => {
             this.props.parent.openHome();
         })
     }
@@ -1531,8 +1529,7 @@ export class ChooseHwDialog extends data.Component<ISettingsProps, ChooseHwDialo
         pxt.setHwVariant(cfg.name, card ? card.name : (cfg.description || cfg.name))
         let editor = this.props.parent
         editor.reloadHeaderAsync()
-            .then(() => !this.state.skipDownload && editor.compile())
-            .done()
+            .then(() => !this.state.skipDownload && editor.compile());
     }
 
     renderCore() {

@@ -16,7 +16,7 @@ namespace pxt.Cloud {
     function offlineError(url: string) {
         let e: any = new Error(Util.lf("Cannot access {0} while offline", url));
         e.isOffline = true;
-        return Promise.delay(1000).then(() => Promise.reject(e))
+        return U.delay(1000).then(() => Promise.reject(e))
     }
 
     export function hasAccessToken() {
@@ -164,28 +164,49 @@ namespace pxt.Cloud {
 
     // 1h check on markdown content if not on development server
     const MARKDOWN_EXPIRATION = pxt.BrowserUtils.isLocalHostDev() ? 1 : 1 * 60 * 60 * 1000;
-    export function markdownAsync(docid: string, locale?: string): Promise<string> {
+    // 1w check don't use cached version and wait for new content
+    const FORCE_MARKDOWN_UPDATE = MARKDOWN_EXPIRATION * 24 * 7;
+    export async function markdownAsync(docid: string, locale?: string): Promise<string> {
         locale = locale || pxt.Util.userLanguage();
         const live = pxt.Util.localizeLive;
         const branch = "";
-        return pxt.BrowserUtils.translationDbAsync()
-            .then(db => db.getAsync(locale, docid, "")
-                .then(entry => {
-                    if (entry && Date.now() - entry.time > MARKDOWN_EXPIRATION)
-                        // background update,
-                        downloadMarkdownAsync(docid, locale, live, entry.etag)
-                            .then(r => db.setAsync(locale, docid, branch, r.etag, undefined, r.md || entry.md))
-                            .catch(() => { }) // swallow errors
-                            .done();
-                    // return cached entry
-                    if (entry && entry.md)
-                        return entry.md;
-                    // download and cache
-                    else return downloadMarkdownAsync(docid, locale, live)
-                        .then(r => db.setAsync(locale, docid, branch, r.etag, undefined, r.md)
-                            .then(() => r.md))
-                        .catch(() => ""); // no translation
-                }))
+
+        const db = await pxt.BrowserUtils.translationDbAsync();
+        const entry = await db.getAsync(locale, docid, branch);
+
+        const downloadAndSetMarkdownAsync = async () => {
+            try {
+                const r = await downloadMarkdownAsync(docid, locale, live, entry?.etag);
+                await db.setAsync(locale, docid, branch, r.etag, undefined, r.md || entry?.md);
+                return r.md;
+            } catch {
+                return ""; // no translation
+            }
+        };
+
+        if (entry) {
+            const timeDiff = Date.now() - entry.time;
+            const shouldFetchInBackground = timeDiff > MARKDOWN_EXPIRATION;
+            const shouldWaitForNewContent = timeDiff > FORCE_MARKDOWN_UPDATE;
+
+            if (!shouldWaitForNewContent) {
+                if (shouldFetchInBackground) {
+                    pxt.tickEvent("markdown.update.background");
+                    // background update, do not wait
+                    downloadAndSetMarkdownAsync();
+                }
+
+                // return cached entry
+                if (entry.md) {
+                    return entry.md;
+                }
+            } else {
+                pxt.tickEvent("markdown.update.wait");
+            }
+        }
+
+        // download and cache
+        return downloadAndSetMarkdownAsync();
     }
 
     function downloadMarkdownAsync(docid: string, locale?: string, live?: boolean, etag?: string): Promise<{ md: string; etag?: string; }> {
@@ -209,19 +230,18 @@ namespace pxt.Cloud {
         }
         if (!packaged && locale != "en") {
             url += `&lang=${encodeURIComponent(locale)}`
-            if (live) url += "&live=1"
         }
         if (pxt.BrowserUtils.isLocalHost() && !live)
             return localRequestAsync(url).then(resp => {
                 if (resp.statusCode == 404)
                     return privateRequestAsync({ url, method: "GET" })
-                        .then(resp => { return { md: resp.text, etag: resp.headers["etag"] }; });
+                        .then(resp => { return { md: resp.text, etag: <string>resp.headers["etag"] }; });
                 else return { md: resp.text, etag: undefined };
             });
         else {
             const headers: pxt.Map<string> = etag && !useCdnApi() ? { "If-None-Match": etag } : undefined;
             return apiRequestWithCdnAsync({ url, method: "GET", headers })
-                .then(resp => { return { md: resp.text, etag: resp.headers["etag"] }; });
+                .then(resp => { return { md: resp.text, etag: <string>resp.headers["etag"] }; });
         }
     }
 

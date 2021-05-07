@@ -189,6 +189,8 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                     this.loadingXml = false;
                     this.loadingXmlPromise = null;
                     pxt.perf.measureEnd("domUpdate loadBlockly")
+                    // Do Not Remove: This is used by the skillmap
+                    if (this.parent.isTutorial()) pxt.tickEvent("tutorial.editorLoaded")
                 });
         }
     }
@@ -208,6 +210,18 @@ export class Editor extends toolboxeditor.ToolboxEditor {
 
         Blockly.DropDownDiv.hide();
         Blockly.WidgetDiv.hide();
+    }
+
+    getTemporaryAssets(): pxt.Asset[] {
+        if (!this.editor) return[];
+
+        return pxtblockly.getTemporaryAssets(this.editor, pxt.AssetType.Image)
+            .concat(pxtblockly.getTemporaryAssets(this.editor, pxt.AssetType.Animation))
+    }
+
+    updateTemporaryAsset(asset: pxt.Asset) {
+        const block = this.editor.getBlockById(asset.meta.temporaryInfo.blockId);
+        (block.getField(asset.meta.temporaryInfo.fieldName) as pxtblockly.FieldAssetEditor<any, any>).updateAsset(asset);
     }
 
     private saveBlockly(): string {
@@ -817,7 +831,7 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                 .then(() => {
                     // Initialize the "Make a function" button
                     Blockly.Functions.editFunctionExternalHandler = (mutation: Element, cb: Blockly.Functions.ConfirmEditCallback) => {
-                        Promise.delay(10)
+                        Util.delay(10)
                             .then(() => {
                                 if (!this.functionsDialog) {
                                     const wrapper = document.body.appendChild(document.createElement('div'));
@@ -1017,13 +1031,13 @@ export class Editor extends toolboxeditor.ToolboxEditor {
     openTypeScript() {
         pxt.tickEvent("blocks.showjavascript");
         this.parent.closeFlyout();
-        this.parent.openTypeScriptAsync().done();
+        this.parent.openTypeScriptAsync();
     }
 
     openPython() {
         pxt.tickEvent("blocks.showpython");
         this.parent.closeFlyout();
-        this.parent.openPythonAsync().done();
+        this.parent.openPythonAsync();
     }
 
     private cleanUpShadowBlocks() {
@@ -1150,23 +1164,17 @@ export class Editor extends toolboxeditor.ToolboxEditor {
             return;
         pxt.tickEvent('blocks.extensions.open', { extension: extensionName })
 
-        const { name, url, repoStatus, trusted } = await resolveExtensionUrl(pkg);
+        const { name, url, trusted } = await resolveExtensionUrl(pkg);
 
         // should never happen
-        if (repoStatus === pxt.github.GitRepoStatus.Banned) {
+        if (!trusted) {
             core.errorNotification(lf("Sorry, this extension is not allowed."))
+            pxt.tickEvent('blocks.extensions.untrusted', { extension: extensionName })
             return;
         }
-        // no url registered?
-        if (!url) {
-            core.errorNotification(lf("Sorry, this extension does not have an editor."))
-            return;
-        }
-        /* tslint:enable:no-http-string */
-        this.parent.openExtension(name,
-            url,
-            !trusted && repoStatus !== pxt.github.GitRepoStatus.Approved,
-            trusted);
+
+        pxt.tickEvent('blocks.extensions.trusted', { extension: extensionName })
+        this.parent.openExtension(name, url);
     }
 
     private partitionBlocks() {
