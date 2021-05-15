@@ -795,11 +795,11 @@ function gitSaveLocalAsync(opts: UploadOptions, uplReqs: Map<BlobReq>){
                     console.log("replfile = ",u.filename);
                     //console.log("should repl = ",u.content.match(/@blobCdnUrl@.*?js/));
                     //let regexp = new RegExp("/@blobCdnUrl@.*?\"/", "g");
-                    let reg = /@blobCdnUrl@.*?(?=\")/g;
+                    let reg = /@blobCdnUrl@.*?(?=\"|`)/g;
                     let reg_commit  = /@commitCdnUrl@/g;
                     let match = u.content.match(reg);
                     if(match){
-                        // console.log("match count" , match.length);
+                        console.log("match count" , match.length);
                         for (let replfp of match){
                             let findCDNfp = replfp.split("@").pop();
                             for (let uu of U.values(uplReqs)){
@@ -2588,7 +2588,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                 let hash_art = gitHash(buf);
                 let hash_key = f.slice(4);
                 uplReqs[hash_key] = hash_art;
-                console.log("docs static art hash = " , hash_art , " fp =" , hash_key);
+                //console.log("docs static art hash = " , hash_art , " fp =" , hash_key);
                 const pathUnderDocs = f.slice(docFolder.length + 1);
                 let outputFile = path.join(dst, "blob/"+ hash_art, pathUnderDocs);
     
@@ -2614,7 +2614,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                 const pathUnderDocs = f.slice(docfilesFolder.length + 1);
                 uplReqs[pathUnderDocs] = hash_art;
                 let outputFile = path.join(dst, "blob/"+ hash_art, pathUnderDocs);
-                console.log("docfile static art hash = " , hash_art , " fp =" , pathUnderDocs);
+                //console.log("docfile static art hash = " , hash_art , " fp =" , pathUnderDocs);
 
                 const outputDir = path.dirname(outputFile);
                 if (!validatedDirs[outputDir]) {
@@ -2692,7 +2692,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         for (let replfp of match){
                             let findCDNfp = replfp;
                             let hashKey = replfp.slice(1);
-                            md = md.replace(replfp,"\"https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
+                            md = md.replace(replfp,`\"https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/`+"blob/"+uplReqs[hashKey]+hashKey)
                             //console.log("should find cdn file" ,findCDNfp);
                         }
                     }
@@ -2729,10 +2729,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
                     // console.log("href hash ", uplReqs_proj[url]);
 
                     if(uplReqs_proj[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url]+url;
                         return ` href="${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url] + url;
                         return ` href="${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2748,11 +2748,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
                     // console.log("href hash ", uplReqs_proj[url]);
 
                     if(uplReqs_proj[url]){
-                        
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url]+url;
                         return ` src="${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url] + url;
                         return ` src="${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2762,10 +2761,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
 
                 html = html.replace(/\/doccdn\/(.*?)"/g, (f,  url) => {
                     if(uplReqs_proj[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url]+url;
                         return `${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url]+url;
                         return `${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2775,10 +2774,10 @@ function renderDocs(builtPackaged: string, localDir: string) {
 
                 html = html.replace(/\/docfiles\/(.*?)"/g, (f,  url) => {
                     if(uplReqs_proj[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs_proj[url]+url;
                         return `${cdnurl}"`
                     } else if(uplReqs[url]){
-                        let cdnurl = path.join("https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url],url);
+                        let cdnurl = "https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/blob/"+uplReqs[url] + url;
                         return `${cdnurl}"`
                     } else {
                         let cdnurl = url;
@@ -2826,7 +2825,7 @@ function renderDocs(builtPackaged: string, localDir: string) {
                         for (let replfp of match){
                             let findCDNfp = replfp;
                             let hashKey = replfp.slice(1);
-                            md = md.replace(replfp,"\"https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/"+"blob/"+uplReqs[hashKey]+hashKey)
+                            md = md.replace(replfp,`\"https://pxt-xtronpro.oss-cn-shanghai.aliyuncs.com/`+"blob/"+uplReqs[hashKey]+hashKey)
                             //console.log("should find cdn file" ,findCDNfp);
                         }
                     }
@@ -2844,8 +2843,8 @@ function renderDocs(builtPackaged: string, localDir: string) {
         }
         //pxt.log(`All docs written from ${docFolder}.`);
     }
-    console.log("uplReqs",uplReqs);
-    console.log("uplReqs_proj",uplReqs_proj);
+    //console.log("uplReqs",uplReqs);
+    //console.log("uplReqs_proj",uplReqs_proj);
     let commitfolder = path.join(dst, "c20adde3b102f793061fa52f74ece53afc195ed6");
     let releasefolder = path.join(dst, "release");
     nodeutil.mkdirP(releasefolder)
